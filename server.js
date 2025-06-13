@@ -13,9 +13,26 @@ const { swaggerUi, swaggerDocs } = require('./config/swagger');
 // Initialize express app
 const app = express();
 
+// Trust proxy - required for Railway deployment with rate limiting
+app.set('trust proxy', 1);
+
 // Middleware
 app.use(cors());
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Add request logging middleware
+app.use((req, res, next) => {
+  logger.debug(`${req.method} ${req.path} - Request received`);
+  if (req.method === 'POST') {
+    logger.debug(`Request body: ${JSON.stringify(req.body)}`);
+    if (Object.keys(req.body).length === 0) {
+      logger.warn(`Empty request body received for ${req.method} ${req.path}`);
+      logger.warn(`Content-Type: ${req.headers['content-type']}`);
+    }
+  }
+  next();
+});
 
 // Routes
 app.use('/', authRoutes); // /signup and /login routes
@@ -43,7 +60,7 @@ const PORT = process.env.PORT || 3000;
 const server = app.listen(PORT, () => {
   logger.info(`Server running on port ${PORT}`);
   logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
-  
+
   // Run database migrations after server has started (for Railway)
   if (process.env.DATABASE_URL && process.env.RUN_MIGRATIONS === 'true') {
     // Wait a bit to ensure database is ready

@@ -5,7 +5,12 @@ require('dotenv').config();
 
 const signup = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    // Ensure req.body exists and has properties
+    if (!req.body) {
+      return res.status(400).json({ error: 'Request body is missing' });
+    }
+    
+    const { email, password } = req.body || {};
     
     // Validate input
     if (!email || !password) {
@@ -30,7 +35,12 @@ const signup = async (req, res) => {
 
 const login = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    // Ensure req.body exists and has properties
+    if (!req.body) {
+      return res.status(400).json({ error: 'Request body is missing' });
+    }
+    
+    const { email, password } = req.body || {};
     
     // Validate input
     if (!email || !password) {
