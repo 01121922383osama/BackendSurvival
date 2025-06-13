@@ -5,16 +5,29 @@ require('dotenv').config();
 const logger = require('./logger');
 
 async function initializeDatabase() {
-  // Railway provides a DATABASE_URL environment variable
-  const connectionString = process.env.DATABASE_URL || {
-    host: process.env.DB_HOST,
-    port: process.env.DB_PORT,
-    database: process.env.DB_NAME,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-  };
+  // Configure pool based on available connection info
+  let poolConfig;
+  
+  if (process.env.DATABASE_URL) {
+    // Railway provides a connection string
+    poolConfig = {
+      connectionString: process.env.DATABASE_URL,
+      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+    };
+    logger.info('Using DATABASE_URL for database connection');
+  } else {
+    // Use individual connection parameters
+    poolConfig = {
+      host: process.env.DB_HOST,
+      port: process.env.DB_PORT,
+      database: process.env.DB_NAME,
+      user: process.env.DB_USER,
+      password: process.env.DB_PASSWORD,
+    };
+    logger.info('Using individual parameters for database connection');
+  }
 
-  const pool = new Pool(typeof connectionString === 'string' ? { connectionString } : connectionString);
+  const pool = new Pool(poolConfig);
 
   try {
     // Read SQL files

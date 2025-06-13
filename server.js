@@ -36,19 +36,29 @@ app.get('/health', (req, res) => {
 app.use(errorHandler);
 
 // Database initialization for Railway if needed
-if (process.env.RUN_MIGRATIONS === 'true') {
-  const { initializeDatabase } = require('./config/railway-db-init');
-  logger.info('Running database migrations for Railway deployment');
-  initializeDatabase()
-    .then(() => logger.info('Database migrations completed successfully'))
-    .catch(err => logger.error('Error running migrations:', err));
-}
+// We'll attempt this after the server starts, not during build
 
 // Start server
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   logger.info(`Server running on port ${PORT}`);
   logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  
+  // Run database migrations after server has started (for Railway)
+  if (process.env.DATABASE_URL && process.env.RUN_MIGRATIONS === 'true') {
+    // Wait a bit to ensure database is ready
+    setTimeout(() => {
+      try {
+        logger.info('Attempting to run database migrations...');
+        const { initializeDatabase } = require('./config/railway-db-init');
+        initializeDatabase()
+          .then(() => logger.info('Database migrations completed successfully'))
+          .catch(err => logger.error('Error running migrations:', err));
+      } catch (error) {
+        logger.error('Failed to run migrations:', error);
+      }
+    }, 5000); // Wait 5 seconds before attempting migrations
+  }
 });
 
 // Handle uncaught exceptions

@@ -8,7 +8,6 @@
     "dev": "nodemon server.js",
     "db:init": "node config/db-init.js",
     "railway:init": "node config/railway-db-init.js",
-    "postinstall": "npm run railway:init",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
