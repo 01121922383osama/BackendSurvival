@@ -9,6 +9,7 @@
     "db:init": "node config/db-init.js",
     "railway:init": "node config/railway-db-init.js",
     "run:migrations": "node run-migrations.js",
+    "railway:setup": "node railway-setup.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
