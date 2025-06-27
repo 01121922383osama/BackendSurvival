@@ -1,0 +1,292 @@
+/* Dashboard Main Styles */
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background-color: #f8f9fa;
+}
+
+/* Sidebar Styling */
+.sidebar {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 100;
+  padding: 0;
+  box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+  height: 100vh;
+}
+
+.sidebar .nav-link {
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.75);
+  padding: .75rem 1rem;
+  border-left: 3px solid transparent;
+  transition: all 0.2s ease;
+}
+
+.sidebar .nav-link:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+  border-left: 3px solid rgba(255, 255, 255, 0.5);
+}
+
+.sidebar .nav-link.active {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.15);
+  border-left: 3px solid #fff;
+}
+
+.sidebar .nav-link .fas {
+  width: 20px;
+  text-align: center;
+}
+
+/* Main content area */
+main {
+  padding-top: 20px;
+}
+
+/* Section visibility */
+.section {
+  display: none;
+  animation: fadeIn 0.5s ease forwards;
+}
+
+.section.active-section {
+  display: block;
+}
+
+/* Stats Card Styling */
+.border-left-primary {
+  border-left: 4px solid #4e73df !important;
+}
+
+.border-left-success {
+  border-left: 4px solid #1cc88a !important;
+}
+
+.border-left-info {
+  border-left: 4px solid #36b9cc !important;
+}
+
+.border-left-warning {
+  border-left: 4px solid #f6c23e !important;
+}
+
+.border-left-danger {
+  border-left: 4px solid #e74a3b !important;
+}
+
+.stats-card {
+  transition: all 0.3s ease;
+  border-radius: 0.35rem;
+  border: none;
+  box-shadow: 0 0.15rem 1.75rem 0 rgba(58, 59, 69, 0.15);
+}
+
+.stats-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 0.5rem 2rem 0 rgba(58, 59, 69, 0.25);
+}
+
+/* Device Cards */
+.device-card {
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+  border: none;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
+  margin-bottom: 1.5rem;
+}
+
+.device-card:hover {
+  box-shadow: 0 14px 28px rgba(0,0,0,0.25), 0 10px 10px rgba(0,0,0,0.22);
+  transform: translateY(-5px);
+}
+
+.device-card .card-header {
+  padding: 0.75rem 1.25rem;
+}
+
+.status-indicator {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 8px;
+}
+
+.status-online {
+  background-color: #1cc88a;
+}
+
+.status-offline {
+  background-color: #e74a3b;
+}
+
+.status-warning {
+  background-color: #f6c23e;
+}
+
+.status-alert {
+  background-color: #e74a3b;
+  animation: pulse 1.5s infinite;
+}
+
+/* Status badges */
+.status-badge {
+  padding: 0.35em 0.65em;
+  border-radius: 0.25rem;
+  font-weight: 500;
+}
+
+.badge-online {
+  background-color: #1cc88a;
+  color: #fff;
+}
+
+.badge-offline {
+  background-color: #858796;
+  color: #fff;
+}
+
+.badge-warning {
+  background-color: #f6c23e;
+  color: #fff;
+}
+
+.badge-alert {
+  background-color: #e74a3b;
+  color: #fff;
+}
+
+/* Connection status indicator */
+#connection-status {
+  transition: background-color 0.3s ease;
+  font-size: 0.8rem;
+  padding: 0.35em 0.65em;
+}
+
+#connection-status.connected {
+  background-color: #1cc88a;
+}
+
+#connection-status.connecting {
+  background-color: #f6c23e;
+}
+
+#connection-status.disconnected {
+  background-color: #e74a3b;
+}
+
+/* Animation keyframes */
+@keyframes fadeIn {
+  0% {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.2);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Page transitions */
+.fade-enter {
+  opacity: 0;
+}
+
+.fade-enter-active {
+  opacity: 1;
+  transition: opacity 300ms;
+}
+
+.fade-exit {
+  opacity: 1;
+}
+
+.fade-exit-active {
+  opacity: 0;
+  transition: opacity 300ms;
+}
+
+/* Table styling */
+.table th {
+  border-top: none;
+  background-color: #f8f9fa;
+  font-weight: 600;
+}
+
+.table td {
+  vertical-align: middle;
+}
+
+/* Loader animation */
+.spinner-border {
+  width: 3rem;
+  height: 3rem;
+}
+
+/* Device status visualization */
+.device-values {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.value-card {
+  background: #fff;
+  border-radius: 8px;
+  padding: 15px;
+  flex: 1 1 calc(33.333% - 10px);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  transition: all 0.2s ease;
+}
+
+.value-card:hover {
+  box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+  transform: translateY(-2px);
+}
+
+.value-title {
+  font-size: 0.85rem;
+  color: #5a5c69;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.value-data {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #2e59d9;
+}
+
+/* Animation for new data */
+@keyframes highlight {
+  0% {
+    background-color: rgba(78, 115, 223, 0.1);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+.highlight-animation {
+  animation: highlight 2s ease-out;
+}

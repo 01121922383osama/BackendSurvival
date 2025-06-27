@@ -10,19 +10,26 @@ const signup = async (req, res) => {
       return res.status(400).json({ error: 'Request body is missing' });
     }
     
-    const { email, password } = req.body || {};
+    const { email, password, role } = req.body || {};
     
     // Validate input
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password are required' });
     }
     
-    // Create user
-    const user = await User.createUser(email, password);
+    // Check if this is the first user in the system, make them admin
+    let userRole = role;
+    if (!userRole) {
+      const allUsers = await User.getAllUsers();
+      userRole = allUsers.length === 0 ? 'admin' : 'user';
+    }
+    
+    // Create user with role
+    const user = await User.createUser(email, password, userRole);
     
     res.status(201).json({ 
       message: 'User created successfully',
-      user: { id: user.id, email: user.email }
+      user: { id: user.id, email: user.email, role: user.role }
     });
   } catch (error) {
     if (error.message === 'Email already exists') {
@@ -59,16 +66,21 @@ const login = async (req, res) => {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
     
-    // Create and assign token
+    // Create and assign token with role information
     const token = jwt.sign(
-      { id: user.id, email: user.email },
+      { id: user.id, email: user.email, role: user.role || 'user' },
       process.env.JWT_SECRET,
       { expiresIn: '24h' }
     );
     
     res.status(200).json({
       message: 'Login successful',
-      token
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        role: user.role || 'user'
+      }
     });
   } catch (error) {
     console.error('Login error:', error);

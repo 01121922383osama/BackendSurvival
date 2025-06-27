@@ -23,6 +23,17 @@ const loginSchema = Joi.object({
   })
 });
 
+// Validation schema for user update
+const updateUserSchema = Joi.object({
+  email: Joi.string().email().required().messages({
+    'string.email': 'Email must be a valid email address',
+    'any.required': 'Email is required'
+  }),
+  password: Joi.string().min(6).optional().messages({
+    'string.min': 'Password must be at least 6 characters long'
+  })
+});
+
 // Validation schema for log creation
 const logSchema = Joi.object({
   deviceId: Joi.string().required().messages({
@@ -53,5 +64,6 @@ const validateRequest = (schema) => {
 module.exports = {
   validateSignup: validateRequest(signupSchema),
   validateLogin: validateRequest(loginSchema),
+  validateUpdateUser: validateRequest(updateUserSchema),
   validateLog: validateRequest(logSchema)
 };

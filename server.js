@@ -6,6 +6,8 @@ const path = require('path');
 // Import routes, middleware and config
 const authRoutes = require('./routes/auth');
 const logRoutes = require('./routes/logs');
+const userRoutes = require('./routes/users');
+const firebaseRoutes = require('./routes/firebase');
 const errorHandler = require('./middleware/errorHandler');
 const logger = require('./config/logger');
 const { swaggerUi, swaggerDocs } = require('./config/swagger');
@@ -20,6 +22,9 @@ app.set('trust proxy', 1);
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Serve static files from the public directory
+app.use(express.static(path.join(__dirname, 'public')));
 
 // Add request logging middleware
 app.use((req, res, next) => {
@@ -37,6 +42,8 @@ app.use((req, res, next) => {
 // Routes
 app.use('/', authRoutes); // /signup and /login routes
 app.use('/logs', logRoutes);
+app.use('/users', userRoutes);
+app.use('/firebase', firebaseRoutes);
 
 // API Documentation with Swagger UI
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocs, {
