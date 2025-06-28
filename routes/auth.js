@@ -3,6 +3,7 @@ const router = express.Router();
 const authController = require('../controllers/authController');
 const { authLimiter } = require('../middleware/rateLimiter');
 const { validateSignup, validateLogin } = require('../middleware/validation');
+const { authenticateToken } = require('../middleware/auth');
 
 /**
  * @swagger
@@ -30,10 +31,15 @@ const { validateSignup, validateLogin } = require('../middleware/validation');
  *         password:
  *           type: string
  *           description: The user password (hashed)
+ *         role:
+ *           type: string
+ *           enum: [admin, user]
+ *           description: The user role
  *       example:
  *         id: 1
  *         email: user@example.com
  *         password: $2b$10$X/JGAn7aBVpPp6jj1jSJze9QeJMZLgLxnN0cZIjCGcH/VFGlMPdVS
+ *         role: user
  */
 
 /**
@@ -58,6 +64,10 @@ const { validateSignup, validateLogin } = require('../middleware/validation');
  *               password:
  *                 type: string
  *                 minLength: 6
+ *               role:
+ *                 type: string
+ *                 enum: [admin, user]
+ *                 default: user
  *     responses:
  *       201:
  *         description: User created successfully
@@ -78,6 +88,9 @@ const { validateSignup, validateLogin } = require('../middleware/validation');
  *                     email:
  *                       type: string
  *                       example: user@example.com
+ *                     role:
+ *                       type: string
+ *                       example: user
  *       400:
  *         description: Invalid input
  *       409:
@@ -89,7 +102,7 @@ router.post('/signup', authLimiter, validateSignup, authController.signup);
  * @swagger
  * /login:
  *   post:
- *     summary: Authenticate a user
+ *     summary: Login user
  *     tags: [Authentication]
  *     requestBody:
  *       required: true
@@ -119,12 +132,125 @@ router.post('/signup', authLimiter, validateSignup, authController.signup);
  *                   example: Login successful
  *                 token:
  *                   type: string
- *                   example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
- *       400:
- *         description: Invalid input
+ *                   description: JWT token
+ *                 user:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                     email:
+ *                       type: string
+ *                     role:
+ *                       type: string
  *       401:
- *         description: Invalid email or password
+ *         description: Invalid credentials
  */
 router.post('/login', authLimiter, validateLogin, authController.login);
+
+/**
+ * @swagger
+ * /firebase-signup:
+ *   post:
+ *     summary: Register a new user with Firebase
+ *     tags: [Authentication]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *               - password
+ *               - name
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *               password:
+ *                 type: string
+ *                 minLength: 6
+ *               name:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: User created successfully
+ *       409:
+ *         description: Email already exists
+ */
+router.post('/firebase-signup', authLimiter, authController.firebaseSignup);
+
+/**
+ * @swagger
+ * /verify-token:
+ *   post:
+ *     summary: Verify a Firebase ID token
+ *     tags: [Authentication]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - token
+ *             properties:
+ *               token:
+ *                 type: string
+ *                 description: The Firebase ID token to verify.
+ *     responses:
+ *       200:
+ *         description: Token verified successfully
+ *       401:
+ *         description: Invalid or expired token
+ */
+router.post('/verify-token', authLimiter, authController.verifyToken);
+
+/**
+ * @swagger
+ * /profile:
+ *   get:
+ *     summary: Get current user profile
+ *     tags: [Authentication]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: User profile retrieved successfully
+ *       401:
+ *         description: Unauthorized
+ */
+router.get('/profile', authenticateToken, authController.getProfile);
+
+/**
+ * @swagger
+ * /profile:
+ *   put:
+ *     summary: Update current user profile
+ *     tags: [Authentication]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *               password:
+ *                 type: string
+ *                 minLength: 6
+ *     responses:
+ *       200:
+ *         description: Profile updated successfully
+ *       401:
+ *         description: Unauthorized
+ *       409:
+ *         description: Email already exists
+ */
+router.put('/profile', authenticateToken, authController.updateProfile);
 
 module.exports = router;

@@ -22,4 +22,4 @@ const db = getFirestore(app);
 const analytics = getAnalytics(app);
 
 // Export Firebase services
-export { app, auth, db, analytics, signInWithEmailAndPassword, signOut, onAuthStateChanged, setPersistence, browserSessionPersistence, browserLocalPersistence };
+export { app, auth, db, analytics, signInWithEmailAndPassword, signOut, onAuthStateChanged };

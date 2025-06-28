@@ -114,10 +114,20 @@
       const loginError = document.getElementById('login-error');
 
       // Check if user is already signed in
-      auth.onAuthStateChanged(user => {
+      auth.onAuthStateChanged(async (user) => {
         if (user) {
-          // User is signed in, redirect to dashboard
-          window.location.href = '/admin/index.html';
+          console.log('User already signed in:', user.email);
+          
+          // Display user ID for admin setup
+          loginError.textContent = `Your user ID is: ${user.uid} - Use this ID to set up admin access`;
+          loginError.classList.remove('d-none');
+          loginError.classList.remove('alert-danger');
+          loginError.classList.add('alert-info');
+          
+          // TEMPORARY: Always redirect to dashboard for now
+          setTimeout(() => {
+            window.location.href = '/admin/index.html';
+          }, 1000);
         }
       });
 

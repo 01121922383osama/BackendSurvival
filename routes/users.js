@@ -171,4 +171,65 @@ router.put('/:id', authenticateToken, isOwnerOrAdmin, apiLimiter, validateUpdate
  */
 router.delete('/:id', authenticateToken, isAdmin, apiLimiter, userController.deleteUser);
 
+/**
+ * @swagger
+ * /users/{id}/devices:
+ *   get:
+ *     summary: Get devices for a specific user
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         schema:
+ *           type: string
+ *         required: true
+ *         description: User ID
+ *     responses:
+ *       200:
+ *         description: A list of devices for the user
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: User not found
+ */
+router.get('/:id/devices', authenticateToken, isOwnerOrAdmin, apiLimiter, userController.getUserDevices);
+
+/**
+ * @swagger
+ * /users/{id}/devices:
+ *   post:
+ *     summary: Add a device for a specific user
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         schema:
+ *           type: string
+ *         required: true
+ *         description: User ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               id:
+ *                 type: string
+ *               name:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Device added successfully
+ *       400:
+ *         description: Invalid input
+ *       401:
+ *         description: Unauthorized
+ */
+router.post('/:id/devices', authenticateToken, isOwnerOrAdmin, apiLimiter, userController.addUserDevice);
+
 module.exports = router;

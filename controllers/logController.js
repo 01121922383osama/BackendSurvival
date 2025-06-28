@@ -32,26 +32,42 @@ const createLog = async (req, res, next) => {
   }
 };
 
-const getLogsByDeviceId = async (req, res, next) => {
+// Get logs for current user or all logs (admin)
+const getLogs = async (req, res, next) => {
   try {
-    const { deviceId } = req.params;
+    const limit = parseInt(req.query.limit) || 100;
+    const offset = parseInt(req.query.offset) || 0;
+    const userRole = req.user.role;
+    const userId = req.user.userId;
     
-    // Validate input
-    if (!deviceId) {
-      return res.status(400).json({ error: 'deviceId is required' });
+    let logs, count;
+    
+    if (userRole === 'admin') {
+      // Admin gets all logs
+      logs = await Log.getAllLogs(limit, offset);
+      count = await Log.getLogCount();
+    } else {
+      // Regular users get only their device logs
+      logs = await Log.getLogsByUserId(userId, limit, offset);
+      count = await Log.getLogCountByUserId(userId);
     }
     
-    // Get logs
-    const logs = await Log.getLogsByDeviceId(deviceId);
-    
-    res.status(200).json(logs);
+    res.status(200).json({
+      logs,
+      pagination: {
+        total: count,
+        limit,
+        offset,
+        hasMore: offset + logs.length < count
+      }
+    });
   } catch (error) {
     logger.error('Get logs error:', error);
     next(error);
   }
 };
 
-// Get all logs with pagination
+// Get all logs (admin only)
 const getAllLogs = async (req, res, next) => {
   try {
     const limit = parseInt(req.query.limit) || 100;
@@ -71,6 +87,26 @@ const getAllLogs = async (req, res, next) => {
     });
   } catch (error) {
     logger.error('Get all logs error:', error);
+    next(error);
+  }
+};
+
+const getLogsByDeviceId = async (req, res, next) => {
+  try {
+    const { deviceId } = req.params;
+    const limit = parseInt(req.query.limit) || 100;
+    
+    // Validate input
+    if (!deviceId) {
+      return res.status(400).json({ error: 'deviceId is required' });
+    }
+    
+    // Get logs
+    const logs = await Log.getLogsByDeviceId(deviceId, limit);
+    
+    res.status(200).json(logs);
+  } catch (error) {
+    logger.error('Get logs error:', error);
     next(error);
   }
 };
@@ -155,6 +191,27 @@ const deleteLog = async (req, res, next) => {
   }
 };
 
+// Get log count
+const getLogCount = async (req, res, next) => {
+  try {
+    const userRole = req.user.role;
+    const userId = req.user.userId;
+    
+    let count;
+    
+    if (userRole === 'admin') {
+      count = await Log.getLogCount();
+    } else {
+      count = await Log.getLogCountByUserId(userId);
+    }
+    
+    res.status(200).json({ count });
+  } catch (error) {
+    logger.error('Get log count error:', error);
+    next(error);
+  }
+};
+
 // Helper function to validate ISO 8601 date string
 function isValidISODate(dateString) {
   if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(.\d+)?(Z|[+-]\d{2}:\d{2})?$/.test(dateString)) {
@@ -166,9 +223,11 @@ function isValidISODate(dateString) {
 
 module.exports = {
   createLog,
-  getLogsByDeviceId,
+  getLogs,
   getAllLogs,
+  getLogsByDeviceId,
   getLogById,
   updateLog,
-  deleteLog
+  deleteLog,
+  getLogCount
 };

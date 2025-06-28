@@ -3,11 +3,15 @@ const cors = require('cors');
 require('dotenv').config();
 const path = require('path');
 
+// Import Firebase and MQTT services
+require('./firebase/firebaseInit');
+require('./firebase/mqttService');
+
 // Import routes, middleware and config
 const authRoutes = require('./routes/auth');
 const logRoutes = require('./routes/logs');
 const userRoutes = require('./routes/users');
-const firebaseRoutes = require('./routes/firebase');
+const deviceRoutes = require('./routes/devices');
 const errorHandler = require('./middleware/errorHandler');
 const logger = require('./config/logger');
 const { swaggerUi, swaggerDocs } = require('./config/swagger');
@@ -40,10 +44,10 @@ app.use((req, res, next) => {
 });
 
 // Routes
-app.use('/', authRoutes); // /signup and /login routes
+app.use('/', authRoutes); // /signup, /login, /profile routes
 app.use('/logs', logRoutes);
 app.use('/users', userRoutes);
-app.use('/firebase', firebaseRoutes);
+app.use('/devices', deviceRoutes);
 
 // API Documentation with Swagger UI
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocs, {
@@ -54,6 +58,13 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocs, {
 // Health check route
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// MQTT status route
+app.get('/mqtt/status', (req, res) => {
+  const mqttService = require('./firebase/mqttService');
+  const status = mqttService.getConnectionStatus();
+  res.status(200).json(status);
 });
 
 // Error handling middleware

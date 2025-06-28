@@ -1,89 +1,73 @@
-const { db } = require('./firebaseInit');
+const admin = require('./firebaseInit');
+const logger = require('../config/logger');
+const db = admin.firestore();
 
-/**
- * Create or update a user in Firestore after successful authentication
- * @param {string} uid - Firebase Auth UID
- * @param {object} userData - User data to store
- * @returns {Promise<object>} - Created/updated user document
- */
-async function saveUserToFirestore(uid, userData) {
+const createUser = async (uid, userData) => {
   try {
-    const userRef = db.collection('users').doc(uid);
-    
-    // Add timestamps
-    const now = new Date();
-    const userDataWithTimestamps = {
+    await db.collection('users').doc(uid).set({
       ...userData,
-      updatedAt: now
-    };
-    
-    // If new user, add createdAt
-    const userDoc = await userRef.get();
-    if (!userDoc.exists) {
-      userDataWithTimestamps.createdAt = now;
-    }
-    
-    // Update or create the user document
-    await userRef.set(userDataWithTimestamps, { merge: true });
-    
-    // Return the updated user data
-    return {
-      uid,
-      ...userDataWithTimestamps
-    };
-  } catch (error) {
-    console.error('Error saving user to Firestore:', error);
-    throw error;
-  }
-}
-
-/**
- * Update a user's device token in Firestore
- * @param {string} uid - Firebase Auth UID
- * @param {string} deviceToken - FCM device token
- * @returns {Promise<void>}
- */
-async function updateUserDeviceToken(uid, deviceToken) {
-  try {
-    const userRef = db.collection('users').doc(uid);
-    
-    await userRef.update({
-      deviceToken,
-      updatedAt: new Date()
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
-    
-    console.log(`Updated device token for user ${uid}`);
+    logger.info(`User ${uid} created in Firestore`);
+    return { uid, ...userData };
   } catch (error) {
-    console.error('Error updating device token:', error);
-    throw error;
+    logger.error(`Error creating user ${uid} in Firestore:`, error);
+    throw new Error('Could not create user in Firestore.');
   }
-}
+};
 
-/**
- * Get a user by their UID
- * @param {string} uid - Firebase Auth UID
- * @returns {Promise<object|null>} - User data or null if not found
- */
-async function getUserByUid(uid) {
+const getUserById = async (uid) => {
   try {
     const userDoc = await db.collection('users').doc(uid).get();
-    
-    if (!userDoc.exists) {
-      return null;
+    if (userDoc.exists) {
+      return { id: userDoc.id, ...userDoc.data() };
     }
-    
-    return {
-      uid,
-      ...userDoc.data()
-    };
+    return null;
   } catch (error) {
-    console.error('Error getting user:', error);
-    throw error;
+    logger.error(`Error fetching user ${uid}:`, error);
+    throw new Error('Could not fetch user.');
   }
-}
+};
+
+const getAllUsers = async () => {
+  try {
+    const snapshot = await db.collection('users').get();
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  } catch (error) {
+    logger.error('Error fetching all users:', error);
+    throw new Error('Could not fetch all users.');
+  }
+};
+
+const updateUser = async (uid, userData) => {
+  try {
+    await db.collection('users').doc(uid).update({
+      ...userData,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    logger.info(`User ${uid} updated in Firestore`);
+  } catch (error) {
+    logger.error(`Error updating user ${uid} in Firestore:`, error);
+    throw new Error('Could not update user in Firestore.');
+  }
+};
+
+const deleteUser = async (uid) => {
+  try {
+    // This will delete the user from Firestore, but not from Firebase Auth
+    await db.collection('users').doc(uid).delete();
+    await admin.auth().deleteUser(uid);
+    logger.info(`User ${uid} deleted from Firestore and Auth`);
+  } catch (error) {
+    logger.error(`Error deleting user ${uid}:`, error);
+    throw new Error('Could not delete user.');
+  }
+};
 
 module.exports = {
-  saveUserToFirestore,
-  updateUserDeviceToken,
-  getUserByUid
+  createUser,
+  getUserById,
+  getAllUsers,
+  updateUser,
+  deleteUser,
 };

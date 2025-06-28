@@ -48,13 +48,27 @@ const logSchema = Joi.object({
   })
 });
 
+// Validation schema for log update (same as log creation)
+const updateLogSchema = Joi.object({
+  deviceId: Joi.string().required().messages({
+    'any.required': 'Device ID is required'
+  }),
+  timestamp: Joi.string().isoDate().required().messages({
+    'string.isoDate': 'Timestamp must be a valid ISO 8601 date string',
+    'any.required': 'Timestamp is required'
+  }),
+  params: Joi.object().required().messages({
+    'any.required': 'Params object is required'
+  })
+});
+
 // Middleware function for validating request body
 const validateRequest = (schema) => {
   return (req, res, next) => {
     const { error } = schema.validate(req.body);
     if (error) {
-      return res.status(400).json({ 
-        error: error.details[0].message 
+      return res.status(400).json({
+        error: error.details[0].message
       });
     }
     next();
@@ -65,5 +79,6 @@ module.exports = {
   validateSignup: validateRequest(signupSchema),
   validateLogin: validateRequest(loginSchema),
   validateUpdateUser: validateRequest(updateUserSchema),
-  validateLog: validateRequest(logSchema)
+  validateLog: validateRequest(logSchema),
+  validateUpdateLog: validateRequest(updateLogSchema)
 };

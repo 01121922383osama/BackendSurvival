@@ -1,4 +1,20 @@
 /* Dashboard Main Styles */
+
+/* MQTT Log Entry Animation */
+@keyframes highlightNew {
+  0% { background-color: rgba(0, 123, 255, 0.3); }
+  50% { background-color: rgba(0, 123, 255, 0.1); }
+  100% { background-color: transparent; }
+}
+
+.new-log {
+  animation: highlightNew 3s ease-out forwards;
+}
+
+/* Toast for MQTT messages */
+.toast-container {
+  z-index: 1060;
+}
 body {
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   background-color: #f8f9fa;

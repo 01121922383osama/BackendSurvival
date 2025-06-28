@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const logController = require('../controllers/logController');
-const { authenticateToken, isAdmin, isOwnerOrAdmin } = require('../middleware/authMiddleware');
+const { authenticateToken, requireAdmin, checkDeviceAccess } = require('../middleware/auth');
 const { logCreationLimiter, apiLimiter } = require('../middleware/rateLimiter');
 const { validateLog, validateUpdateLog } = require('../middleware/validation');
 
@@ -36,11 +36,19 @@ const { validateLog, validateUpdateLog } = require('../middleware/validation');
  *         params:
  *           type: object
  *           description: Custom parameters for the log
+ *         topic:
+ *           type: string
+ *           description: MQTT topic
+ *         status_color:
+ *           type: string
+ *           description: Status color indicator
  *       example:
  *         id: 1
  *         device_id: device123
  *         timestamp: 2023-01-01T12:00:00Z
  *         params: { "fallStatus": "normal", "motionStatus": "active" }
+ *         topic: "/Radar60FL/device123/status"
+ *         status_color: "green"
  */
 
 /**
@@ -97,69 +105,9 @@ router.post('/', authenticateToken, logCreationLimiter, validateLog, logControll
 
 /**
  * @swagger
- * /logs/{deviceId}:
- *   get:
- *     summary: Get logs for a specific device
- *     tags: [Logs]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: deviceId
- *         schema:
- *           type: string
- *         required: true
- *         description: Device identifier
- *     responses:
- *       200:
- *         description: A list of logs for the device
- *         content:
- *           application/json:
- *             schema:
- *               type: array
- *               items:
- *                 $ref: '#/components/schemas/Log'
- *       401:
- *         description: Unauthorized - Invalid or missing token
- *       429:
- *         description: Too many requests
- */
-/**
- * @swagger
- * /logs/id/{id}:
- *   get:
- *     summary: Get log by ID
- *     tags: [Logs]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         schema:
- *           type: integer
- *         required: true
- *         description: Log ID
- *     responses:
- *       200:
- *         description: Log details
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Log'
- *       401:
- *         description: Unauthorized - Invalid or missing token
- *       404:
- *         description: Log not found
- *       429:
- *         description: Too many requests
- */
-router.get('/id/:id', authenticateToken, apiLimiter, logController.getLogById);
-
-/**
- * @swagger
  * /logs:
  *   get:
- *     summary: Get all logs with pagination
+ *     summary: Get logs for current user or all logs (admin)
  *     tags: [Logs]
  *     security:
  *       - bearerAuth: []
@@ -200,19 +148,47 @@ router.get('/id/:id', authenticateToken, apiLimiter, logController.getLogById);
  *                     offset:
  *                       type: integer
  *                       example: 0
- *                     hasMore:
- *                       type: boolean
- *                       example: true
  *       401:
  *         description: Unauthorized - Invalid or missing token
  *       429:
  *         description: Too many requests
  */
-router.get('/', authenticateToken, isAdmin, apiLimiter, logController.getAllLogs);
+router.get('/', authenticateToken, apiLimiter, logController.getLogs);
 
 /**
  * @swagger
- * /logs/{deviceId}:
+ * /logs/all:
+ *   get:
+ *     summary: Get all logs (admin only)
+ *     tags: [Logs]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 100
+ *         description: Maximum number of logs to return
+ *       - in: query
+ *         name: offset
+ *         schema:
+ *           type: integer
+ *           default: 0
+ *         description: Number of logs to skip
+ *     responses:
+ *       200:
+ *         description: A paginated list of all logs
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Admin access required
+ */
+router.get('/all', authenticateToken, requireAdmin, apiLimiter, logController.getAllLogs);
+
+/**
+ * @swagger
+ * /logs/device/{deviceId}:
  *   get:
  *     summary: Get logs for a specific device
  *     tags: [Logs]
@@ -225,6 +201,12 @@ router.get('/', authenticateToken, isAdmin, apiLimiter, logController.getAllLogs
  *           type: string
  *         required: true
  *         description: Device identifier
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 100
+ *         description: Maximum number of logs to return
  *     responses:
  *       200:
  *         description: A list of logs for the device
@@ -236,10 +218,43 @@ router.get('/', authenticateToken, isAdmin, apiLimiter, logController.getAllLogs
  *                 $ref: '#/components/schemas/Log'
  *       401:
  *         description: Unauthorized - Invalid or missing token
+ *       403:
+ *         description: Access denied to this device
  *       429:
  *         description: Too many requests
  */
-router.get('/:deviceId', authenticateToken, apiLimiter, logController.getLogsByDeviceId);
+router.get('/device/:deviceId', authenticateToken, checkDeviceAccess, apiLimiter, logController.getLogsByDeviceId);
+
+/**
+ * @swagger
+ * /logs/id/{id}:
+ *   get:
+ *     summary: Get log by ID
+ *     tags: [Logs]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         schema:
+ *           type: integer
+ *         required: true
+ *         description: Log ID
+ *     responses:
+ *       200:
+ *         description: Log details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Log'
+ *       401:
+ *         description: Unauthorized - Invalid or missing token
+ *       404:
+ *         description: Log not found
+ *       429:
+ *         description: Too many requests
+ */
+router.get('/id/:id', authenticateToken, apiLimiter, logController.getLogById);
 
 /**
  * @swagger
@@ -262,44 +277,25 @@ router.get('/:deviceId', authenticateToken, apiLimiter, logController.getLogsByD
  *         application/json:
  *           schema:
  *             type: object
- *             required:
- *               - deviceId
- *               - timestamp
- *               - params
  *             properties:
  *               deviceId:
  *                 type: string
- *                 description: Device identifier
  *               timestamp:
  *                 type: string
  *                 format: date-time
- *                 description: ISO 8601 timestamp
  *               params:
  *                 type: object
- *                 description: Custom parameters for the log
  *     responses:
  *       200:
  *         description: Log updated successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 message:
- *                   type: string
- *                   example: Log updated successfully
- *                 log:
- *                   $ref: '#/components/schemas/Log'
  *       400:
  *         description: Invalid input
  *       401:
- *         description: Unauthorized - Invalid or missing token
+ *         description: Unauthorized
  *       404:
  *         description: Log not found
- *       429:
- *         description: Too many requests
  */
-router.put('/:id', authenticateToken, isAdmin, apiLimiter, validateLog, logController.updateLog);
+router.put('/:id', authenticateToken, requireAdmin, validateUpdateLog, logController.updateLog);
 
 /**
  * @swagger
@@ -319,21 +315,37 @@ router.put('/:id', authenticateToken, isAdmin, apiLimiter, validateLog, logContr
  *     responses:
  *       200:
  *         description: Log deleted successfully
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Admin access required
+ *       404:
+ *         description: Log not found
+ */
+router.delete('/:id', authenticateToken, requireAdmin, logController.deleteLog);
+
+/**
+ * @swagger
+ * /logs/count:
+ *   get:
+ *     summary: Get total log count
+ *     tags: [Logs]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Total log count
  *         content:
  *           application/json:
  *             schema:
  *               type: object
  *               properties:
- *                 message:
- *                   type: string
- *                   example: Log deleted successfully
+ *                 count:
+ *                   type: integer
+ *                   example: 1000
  *       401:
- *         description: Unauthorized - Invalid or missing token
- *       404:
- *         description: Log not found
- *       429:
- *         description: Too many requests
+ *         description: Unauthorized
  */
-router.delete('/:id', authenticateToken, isAdmin, apiLimiter, logController.deleteLog);
+router.get('/count', authenticateToken, apiLimiter, logController.getLogCount);
 
 module.exports = router;

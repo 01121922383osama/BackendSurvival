@@ -1,347 +1,259 @@
 const mqtt = require('mqtt');
-const { saveDeviceLog } = require('./deviceService');
+const logger = require('../config/logger');
+const admin = require('./firebaseInit');
+const { handleDeviceAlert } = require('./notificationService');
+const logModel = require('../models/log');
+const deviceModel = require('../models/device');
 
-let client = null;
-let reconnectAttempts = 0;
-const maxReconnectAttempts = 3;
-let reconnectTimer = null;
-let isDisposed = false;
-
-// Default MQTT configuration matching Flutter app
-const defaultConfig = {
-  host: '167.71.52.138',
-  port: 1883,
-  username: '123456',
-  password: '123456',
-  topic: '/Radar60FL/#'
+const broker = process.env.MQTT_BROKER || 'mqtt://167.71.52.138';
+const options = {
+  port: process.env.MQTT_PORT || 1883,
+  clientId: `backend_server_${Date.now()}`,
+  username: process.env.MQTT_USERNAME || '123456',
+  password: process.env.MQTT_PASSWORD || '123456',
+  keepalive: 30,
+  reconnectPeriod: 5000,
+  connectTimeout: 30000,
+  clean: true
 };
 
-// In-memory map of allowed device IDs for filtering
-// In production, consider using Redis or another distributed cache
-const allowedDeviceIds = new Set();
+let client = null;
+let isConnected = false;
+let reconnectAttempts = 0;
+const maxReconnectAttempts = 5;
 
-/**
- * Set allowed device IDs for filtering
- * @param {Array<string>} deviceIds - Array of device IDs to allow
- */
-function setAllowedDeviceIds(deviceIds) {
-  allowedDeviceIds.clear();
-  deviceIds.forEach(id => allowedDeviceIds.add(id));
-  console.log(`Set ${deviceIds.length} allowed device IDs for filtering`);
-}
+// Initialize MQTT connection
+const initializeMQTT = () => {
+  if (client) {
+    logger.info('MQTT client already exists, disconnecting first...');
+    client.end();
+  }
 
-/**
- * Connect to MQTT broker
- * @param {object} config - MQTT configuration
- * @returns {Promise<void>}
- */
-function connectMqtt(config = {}) {
-  return new Promise((resolve, reject) => {
-    // Reset disposed flag when connecting
-    isDisposed = false;
+  logger.info('Initializing MQTT connection...');
+  client = mqtt.connect(broker, options);
+
+  client.on('connect', () => {
+    logger.info('✅ Connected to MQTT broker');
+    isConnected = true;
+    reconnectAttempts = 0;
     
-    const {
-      host = defaultConfig.host,
-      port = defaultConfig.port,
-      username = defaultConfig.username,
-      password = defaultConfig.password,
-      topic = defaultConfig.topic,
-      clientId = `server_${Math.random().toString(16).slice(2, 8)}`
-    } = config;
+    // Subscribe to all device topics
+    client.subscribe('/Radar60FL/#', (err) => {
+      if (err) {
+        logger.error('MQTT subscription error:', err);
+      } else {
+        logger.info('Subscribed to /Radar60FL/#');
+      }
+    });
+  });
+
+  client.on('message', async (topic, message) => {
+    try {
+      const payload = JSON.parse(message.toString());
+      logger.debug(`MQTT message received on topic ${topic}:`, payload);
+
+      const topicParts = topic.split('/');
+      if (topicParts.length < 3) {
+        logger.warn(`Invalid topic format: ${topic}`);
+        return;
+      }
+      const deviceId = topicParts[2];
+
+      // Process device status and update device record
+      await processDeviceMessage(deviceId, topic, payload);
+
+      // Save log to database
+      await saveLogToDatabase(deviceId, topic, payload);
+
+      // Check for alert conditions and send notifications
+      if (payload.params?.fallStatus === '1' || payload.params?.residentStatus === '1') {
+        await handleDeviceAlert(deviceId, payload.params);
+      }
+
+    } catch (error) {
+      logger.error('Error processing MQTT message:', error);
+    }
+  });
+
+  client.on('error', (error) => {
+    logger.error('MQTT client error:', error);
+    isConnected = false;
+  });
+
+  client.on('close', () => {
+    logger.warn('MQTT client disconnected');
+    isConnected = false;
+    handleReconnect();
+  });
+
+  client.on('reconnect', () => {
+    logger.info('MQTT client reconnecting...');
+  });
+
+  client.on('offline', () => {
+    logger.warn('MQTT client went offline');
+    isConnected = false;
+  });
+};
+
+// Process device message and update device status
+const processDeviceMessage = async (deviceId, topic, payload) => {
+  try {
+    const params = payload.params || {};
     
-    const connectUrl = `mqtt://${host}`;
+    // Check if device exists in database
+    let device = await deviceModel.getDeviceBySerialNumber(deviceId);
     
-    const options = {
-      clientId,
-      port,
-      clean: true,
-      connectTimeout: 4000,
-      reconnectPeriod: 1000
+    if (!device) {
+      // Create new device if it doesn't exist
+      logger.info(`Creating new device: ${deviceId}`);
+      device = await deviceModel.createDevice({
+        serialNumber: deviceId,
+        name: `Device ${deviceId}`,
+        location: 'Unknown',
+        isConnected: true,
+        hasAlert: false,
+        lastUpdated: new Date(),
+        notificationsEnabled: true,
+        isFall: false,
+        owners: []
+      });
+    }
+
+    // Update device status based on MQTT message
+    const updateData = {
+      isConnected: true,
+      lastUpdated: new Date(),
+      hasAlert: params.fallStatus === '1' || params.residentStatus === '1',
+      alertMessage: params.fallStatus === '1' ? 'Fall detected' : 
+                   params.residentStatus === '1' ? 'Resident alert' : null,
+      isFall: params.fallStatus === '1'
     };
-    
-    // Add credentials if provided
-    if (username && password) {
-      options.username = username;
-      options.password = password;
-    }
-    
-    console.log(`Connecting to MQTT broker at ${connectUrl}:${port}...`);
-    
-    try {
-      client = mqtt.connect(connectUrl, options);
-      
-      client.on('connect', () => {
-        console.log('✅ Connected to MQTT broker');
-        reconnectAttempts = 0;
-        
-        // Subscribe to the topic
-        console.log(`Subscribing to topic: ${topic}`);
-        client.subscribe(topic, { qos: 1 });
-        
-        resolve(client);
-      });
-      
-      client.on('error', (err) => {
-        console.error('❌ MQTT connection error:', err);
-        reject(err);
-      });
-      
-      client.on('message', handleMqttMessage);
-      
-      client.on('disconnect', () => {
-        console.log('MQTT: Disconnected');
-        
-        // Only attempt to reconnect if not disposed
-        if (!isDisposed && reconnectAttempts < maxReconnectAttempts) {
-          handleReconnect();
-        }
-      });
-      
-    } catch (error) {
-      console.error('❌ MQTT connection failed:', error);
-      reject(error);
-    }
-  });
-}
 
-/**
- * Subscribe to MQTT topics for a user
- * @param {string} userId - User ID
- * @param {Array<string>} deviceIds - Array of device IDs
- * @returns {Promise<void>}
- */
-function subscribeToUserDevices(userId, deviceIds) {
-  if (!client || !client.connected) {
-    throw new Error('MQTT client not connected');
-  }
-  
-  return new Promise((resolve, reject) => {
-    try {
-      // Set allowed device IDs for filtering
-      setAllowedDeviceIds(deviceIds);
-      
-      // Store user-device mapping for message handling
-      deviceIds.forEach(deviceId => {
-        const topic = `/Radar60FL/${deviceId}/#`;
-        
-        client.subscribe(topic, { qos: 1 }, (err) => {
-          if (err) {
-            console.error(`Error subscribing to ${topic}:`, err);
-            reject(err);
-          } else {
-            console.log(`Subscribed to ${topic} for user ${userId}`);
-            
-            // Store mapping in memory
-            deviceTopicMap[deviceId] = userId;
-          }
-        });
-      });
-      
-      resolve();
-    } catch (error) {
-      console.error('Error subscribing to topics:', error);
-      reject(error);
-    }
-  });
-}
-
-// In-memory map of device IDs to user IDs
-// In production, consider using Redis or another distributed cache
-const deviceTopicMap = {};
-
-/**
- * Handle incoming MQTT messages
- * @param {string} topic - MQTT topic
- * @param {Buffer} message - Message payload
- */
-async function handleMqttMessage(topic, message) {
-  try {
-    console.log(`Received message on topic ${topic}`);
+    await deviceModel.updateDevice(deviceId, updateData);
     
-    // Extract device ID from topic (format: /Radar60FL/{deviceId}/...)
-    const topicParts = topic.split('/');
-    if (topicParts.length < 3) {
-      console.log(`Invalid topic format: ${topic}`);
-      return;
-    }
-    
-    const deviceId = topicParts[2];
-    
-    // Check if this device is allowed
-    if (allowedDeviceIds.size > 0 && !allowedDeviceIds.has(deviceId)) {
-      console.log(`Device ${deviceId} not in allowed list, skipping.`);
-      return;
-    }
-    
-    // Get user ID from device mapping
-    const userId = deviceTopicMap[deviceId];
-    if (!userId) {
-      console.log(`No user mapping found for device ${deviceId}`);
-      return;
-    }
-    
-    // Parse message payload
-    let payload;
-    try {
-      payload = JSON.parse(message.toString());
-    } catch (e) {
-      console.error('Error parsing MQTT message:', e);
-      payload = { rawData: message.toString() };
-      return; // Skip invalid messages
-    }
-    
-    // Check if this is a valid message with params
-    if (!payload.params) {
-      console.log('Message has no params, skipping');
-      return;
-    }
-    
-    // Filter for relevant parameters
-    const rawParams = payload.params;
-    const filteredParams = {};
-    
-    // Only include relevant parameters
-    ['fallStatus', 'residentStatus', 'motionStatus', 'movementSigns', 
-     'someoneExists', 'online', 'heartBeat'].forEach(key => {
-      if (rawParams[key] !== undefined) {
-        filteredParams[key] = rawParams[key];
-      }
-    });
-    
-    // Skip if no relevant parameters
-    if (Object.keys(filteredParams).length === 0) {
-      console.log('No relevant parameters found, skipping');
-      return;
-    }
-    
-    // Save to Firestore
-    await saveDeviceLog(userId, deviceId, {
-      params: filteredParams,
-      timestamp: new Date()
-    });
-    
-    console.log(`Processed message for device ${deviceId}, user ${userId}`);
+    logger.debug(`Updated device ${deviceId} status:`, updateData);
   } catch (error) {
-    console.error('Error handling MQTT message:', error);
+    logger.error(`Error processing device message for ${deviceId}:`, error);
   }
-}
+};
 
-/**
- * Disconnect MQTT client
- */
-function disconnect() {
+// Save log to database
+const saveLogToDatabase = async (deviceId, topic, payload) => {
   try {
-    // Set disposed flag first to prevent new operations
-    isDisposed = true;
+    const params = payload.params || {};
+    const statusColor = getColorForParams(params);
     
-    if (reconnectTimer) {
-      clearTimeout(reconnectTimer);
-      reconnectTimer = null;
-    }
+    await logModel.createLog(
+      deviceId,
+      new Date(),
+      params,
+      topic,
+      statusColor
+    );
     
-    console.log('MQTT: Disconnecting client...');
-    
-    if (client) {
-      // Unsubscribe from all topics first
-      try {
-        client.unsubscribe(defaultConfig.topic);
-        // Wait a moment for unsubscribe to complete
-        setTimeout(() => {
-          if (client.connected) {
-            client.end(true);
-            console.log('MQTT: Disconnected successfully.');
-          } else {
-            console.log('MQTT: Client already disconnected');
-          }
-        }, 300);
-      } catch (e) {
-        console.error('MQTT: Error during disconnect:', e);
-        // Force disconnect if unsubscribe fails
-        if (client.connected) {
-          client.end(true);
-        }
-      }
-    }
-  } catch (e) {
-    console.error('❌ MQTT: Error during disconnect process:', e);
-  } finally {
-    // Always ensure isDisposed is true at the end
-    isDisposed = true;
+    logger.debug(`Saved log to database for device ${deviceId}`);
+  } catch (error) {
+    logger.error(`Error saving log to database for device ${deviceId}:`, error);
   }
-}
+};
 
-/**
- * Handle reconnection logic
- */
-function handleReconnect() {
-  if (isDisposed) return;
-  
+// Handle reconnection
+const handleReconnect = () => {
   if (reconnectAttempts >= maxReconnectAttempts) {
-    console.log('❌ MQTT: Max reconnection attempts reached. Stopping.');
+    logger.error(`Max reconnection attempts (${maxReconnectAttempts}) reached. Stopping reconnection.`);
     return;
   }
-  
+
   reconnectAttempts++;
   const delay = Math.pow(2, reconnectAttempts) * 1000; // Exponential backoff
-  console.log(`MQTT: Attempting reconnect ${reconnectAttempts}/${maxReconnectAttempts} in ${delay/1000} seconds...`);
   
-  if (reconnectTimer) {
-    clearTimeout(reconnectTimer);
-  }
+  logger.info(`Attempting to reconnect in ${delay}ms (attempt ${reconnectAttempts}/${maxReconnectAttempts})`);
   
-  reconnectTimer = setTimeout(async () => {
-    if (isDisposed) return;
-    
-    if (!client || !client.connected) {
-      console.log('MQTT: Retrying connection...');
-      try {
-        await connectMqtt();
-      } catch (e) {
-        if (!isDisposed) {
-          console.error('MQTT: Reconnection attempt failed:', e);
-        }
-      }
+  setTimeout(() => {
+    if (!isConnected) {
+      logger.info('Attempting to reconnect to MQTT broker...');
+      initializeMQTT();
     }
   }, delay);
-}
+};
 
-/**
- * Publish message to MQTT topic
- * @param {string} deviceId - Device ID
- * @param {object} params - Parameters to send
- * @returns {Promise<void>}
- */
-async function publishMessage(deviceId, params) {
-  if (!client || !client.connected) {
-    throw new Error('MQTT client not connected');
+// Publish message to MQTT
+const publishMessage = async (topic, message) => {
+  if (!isConnected || !client) {
+    logger.error('Cannot publish message - MQTT not connected');
+    return false;
   }
-  
-  const topic = `/Radar60FL/${deviceId}/sys/property/set`;
-  const message = {
-    version: '1.0',
-    method: 'set',
-    params
-  };
-  
-  const payload = JSON.stringify(message);
-  
-  return new Promise((resolve, reject) => {
+
+  try {
+    const payload = typeof message === 'string' ? message : JSON.stringify(message);
     client.publish(topic, payload, { qos: 1 }, (err) => {
       if (err) {
-        console.error(`Error publishing to ${topic}:`, err);
-        reject(err);
+        logger.error(`Error publishing to ${topic}:`, err);
       } else {
-        console.log(`Published to ${topic}: ${payload}`);
-        resolve();
+        logger.debug(`Published message to ${topic}:`, payload);
       }
     });
-  });
+    return true;
+  } catch (error) {
+    logger.error(`Error publishing message to ${topic}:`, error);
+    return false;
+  }
+};
+
+// Get connection status
+const getConnectionStatus = () => {
+  return {
+    isConnected,
+    reconnectAttempts,
+    maxReconnectAttempts
+  };
+};
+
+// Disconnect MQTT client
+const disconnect = () => {
+  if (client) {
+    logger.info('Disconnecting MQTT client...');
+    client.end();
+    client = null;
+    isConnected = false;
+  }
+};
+
+function getColorForParams(p) {
+  if (!p) return 'grey';
+
+  const isNoMotionNoMoveNoSomeOneNoSomeExistField = (key) => {
+    const v = p[key]?.toString();
+    if (v == null || v === '?') return true;
+    const n = parseInt(v, 10);
+    return !isNaN(n) && n === 0;
+  };
+
+  const isGreenField = (key) => {
+    const v = p[key]?.toString();
+    if (v == null || v === '?') return false;
+    const n = parseInt(v, 10);
+    return !isNaN(n) && n !== 0;
+  };
+
+  if (p['fallStatus']?.toString() === '1') return 'red';
+  if (p['residentStatus']?.toString() === '1') return 'yellow';
+  if (isGreenField('motionStatus') || isGreenField('movementSigns') || isGreenField('someoneExists')) return 'green';
+  if (isGreenField('online') || isGreenField('heartBeat')) return 'blue';
+  if (isNoMotionNoMoveNoSomeOneNoSomeExistField('motionStatus') || isNoMotionNoMoveNoSomeOneNoSomeExistField('movementSigns') || isNoMotionNoMoveNoSomeOneNoSomeExistField('someoneExists')) return 'blue';
+  if (p['residentStatus']?.toString() === '0') return 'green';
+
+  return 'grey';
 }
 
+// Initialize MQTT connection when module is loaded
+initializeMQTT();
+
 module.exports = {
-  connectMqtt,
-  subscribeToUserDevices,
-  disconnect,
+  client,
   publishMessage,
-  setAllowedDeviceIds
+  getConnectionStatus,
+  disconnect,
+  isConnected: () => isConnected
 };

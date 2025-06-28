@@ -1,16 +1,19 @@
 const admin = require('firebase-admin');
-const serviceAccount = require('./firebase-adminsdk.json');
+const logger = require('../config/logger');
 
-// Initialize Firebase Admin SDK
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount)
-});
+try {
+  const serviceAccount = require('./firebase-adminsdk.json');
 
-const db = admin.firestore();
-const messaging = admin.messaging();
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+    databaseURL: `https://${process.env.FIREBASE_PROJECT_ID}.firebaseio.com`
+  });
 
-module.exports = {
-  admin,
-  db,
-  messaging
-};
+  logger.info('Firebase Admin SDK initialized successfully.');
+} catch (error) {
+  logger.error('Firebase Admin SDK initialization failed:', error);
+  // Exit the process if Firebase initialization fails, as it's a critical dependency
+  process.exit(1);
+}
+
+module.exports = admin;
