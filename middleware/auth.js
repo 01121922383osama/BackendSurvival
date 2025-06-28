@@ -35,6 +35,29 @@ const requireAdmin = (req, res, next) => {
   next();
 };
 
+// Require owner or admin role middleware
+const requireOwnerOrAdmin = (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+
+  const requestedUserId = parseInt(req.params.id);
+  const currentUserId = req.user.userId;
+
+  // Admins can access any user's data
+  if (req.user.role === 'admin') {
+    return next();
+  }
+
+  // Users can only access their own data
+  if (currentUserId === requestedUserId) {
+    return next();
+  }
+
+  logger.warn(`User ${req.user.email} attempted to access data for user ${requestedUserId}`);
+  return res.status(403).json({ error: 'Access denied. You can only access your own data.' });
+};
+
 // Optional authentication middleware (for endpoints that work with or without auth)
 const optionalAuth = (req, res, next) => {
   const authHeader = req.headers['authorization'];
@@ -83,6 +106,7 @@ const checkDeviceAccess = async (req, res, next) => {
 module.exports = {
   authenticateToken,
   requireAdmin,
+  requireOwnerOrAdmin,
   optionalAuth,
   checkDeviceAccess
 };

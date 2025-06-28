@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const userController = require('../controllers/userController');
-const { authenticateToken, isAdmin, isOwnerOrAdmin } = require('../middleware/authMiddleware');
+const { authenticateToken, requireAdmin, requireOwnerOrAdmin } = require('../middleware/auth');
 const { apiLimiter } = require('../middleware/rateLimiter');
 const { validateUpdateUser } = require('../middleware/validation');
 
@@ -37,7 +37,7 @@ const { validateUpdateUser } = require('../middleware/validation');
  *       429:
  *         description: Too many requests
  */
-router.get('/', authenticateToken, isAdmin, apiLimiter, userController.getAllUsers);
+router.get('/', authenticateToken, requireAdmin, apiLimiter, userController.getAllUsers);
 
 /**
  * @swagger
@@ -71,7 +71,7 @@ router.get('/', authenticateToken, isAdmin, apiLimiter, userController.getAllUse
  *       429:
  *         description: Too many requests
  */
-router.get('/:id', authenticateToken, isOwnerOrAdmin, apiLimiter, userController.getUserById);
+router.get('/:id', authenticateToken, requireOwnerOrAdmin, apiLimiter, userController.getUserById);
 
 /**
  * @swagger
@@ -134,7 +134,7 @@ router.get('/:id', authenticateToken, isOwnerOrAdmin, apiLimiter, userController
  *       429:
  *         description: Too many requests
  */
-router.put('/:id', authenticateToken, isOwnerOrAdmin, apiLimiter, validateUpdateUser, userController.updateUser);
+router.put('/:id', authenticateToken, requireOwnerOrAdmin, apiLimiter, validateUpdateUser, userController.updateUser);
 
 /**
  * @swagger
@@ -169,7 +169,7 @@ router.put('/:id', authenticateToken, isOwnerOrAdmin, apiLimiter, validateUpdate
  *       429:
  *         description: Too many requests
  */
-router.delete('/:id', authenticateToken, isAdmin, apiLimiter, userController.deleteUser);
+router.delete('/:id', authenticateToken, requireAdmin, apiLimiter, userController.deleteUser);
 
 /**
  * @swagger
@@ -194,7 +194,7 @@ router.delete('/:id', authenticateToken, isAdmin, apiLimiter, userController.del
  *       404:
  *         description: User not found
  */
-router.get('/:id/devices', authenticateToken, isOwnerOrAdmin, apiLimiter, userController.getUserDevices);
+router.get('/:id/devices', authenticateToken, requireOwnerOrAdmin, apiLimiter, userController.getUserDevices);
 
 /**
  * @swagger
@@ -230,6 +230,6 @@ router.get('/:id/devices', authenticateToken, isOwnerOrAdmin, apiLimiter, userCo
  *       401:
  *         description: Unauthorized
  */
-router.post('/:id/devices', authenticateToken, isOwnerOrAdmin, apiLimiter, userController.addUserDevice);
+router.post('/:id/devices', authenticateToken, requireOwnerOrAdmin, apiLimiter, userController.addUserDevice);
 
 module.exports = router;

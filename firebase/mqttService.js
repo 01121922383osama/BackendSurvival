@@ -32,32 +32,32 @@ const initializeMQTT = () => {
   logger.info('Initializing MQTT connection...');
   client = mqtt.connect(broker, options);
 
-  client.on('connect', () => {
+client.on('connect', () => {
     logger.info('✅ Connected to MQTT broker');
     isConnected = true;
     reconnectAttempts = 0;
     
     // Subscribe to all device topics
-    client.subscribe('/Radar60FL/#', (err) => {
-      if (err) {
-        logger.error('MQTT subscription error:', err);
-      } else {
-        logger.info('Subscribed to /Radar60FL/#');
-      }
-    });
+  client.subscribe('/Radar60FL/#', (err) => {
+    if (err) {
+      logger.error('MQTT subscription error:', err);
+    } else {
+      logger.info('Subscribed to /Radar60FL/#');
+    }
   });
+});
 
-  client.on('message', async (topic, message) => {
-    try {
-      const payload = JSON.parse(message.toString());
-      logger.debug(`MQTT message received on topic ${topic}:`, payload);
+client.on('message', async (topic, message) => {
+  try {
+    const payload = JSON.parse(message.toString());
+    logger.debug(`MQTT message received on topic ${topic}:`, payload);
 
-      const topicParts = topic.split('/');
-      if (topicParts.length < 3) {
-        logger.warn(`Invalid topic format: ${topic}`);
-        return;
-      }
-      const deviceId = topicParts[2];
+    const topicParts = topic.split('/');
+    if (topicParts.length < 3) {
+      logger.warn(`Invalid topic format: ${topic}`);
+      return;
+    }
+    const deviceId = topicParts[2];
 
       // Process device status and update device record
       await processDeviceMessage(deviceId, topic, payload);
@@ -65,23 +65,23 @@ const initializeMQTT = () => {
       // Save log to database
       await saveLogToDatabase(deviceId, topic, payload);
 
-      // Check for alert conditions and send notifications
-      if (payload.params?.fallStatus === '1' || payload.params?.residentStatus === '1') {
-        await handleDeviceAlert(deviceId, payload.params);
-      }
-
-    } catch (error) {
-      logger.error('Error processing MQTT message:', error);
+    // Check for alert conditions and send notifications
+    if (payload.params?.fallStatus === '1' || payload.params?.residentStatus === '1') {
+      await handleDeviceAlert(deviceId, payload.params);
     }
-  });
 
-  client.on('error', (error) => {
-    logger.error('MQTT client error:', error);
+  } catch (error) {
+    logger.error('Error processing MQTT message:', error);
+  }
+});
+
+client.on('error', (error) => {
+  logger.error('MQTT client error:', error);
     isConnected = false;
-  });
+});
 
-  client.on('close', () => {
-    logger.warn('MQTT client disconnected');
+client.on('close', () => {
+  logger.warn('MQTT client disconnected');
     isConnected = false;
     handleReconnect();
   });

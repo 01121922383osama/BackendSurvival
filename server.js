@@ -79,26 +79,62 @@ const server = app.listen(PORT, async () => {
   logger.info(`Server running on port ${PORT}`);
   logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
 
-  // Always run migrations in production, or if explicitly enabled
-  if (process.env.DATABASE_URL && (process.env.NODE_ENV === 'production' || process.env.RUN_MIGRATIONS === 'true')) {
-    try {
-      // Wait a bit to ensure database is ready
-      await new Promise(resolve => setTimeout(resolve, 5000));
+  try {
+    // Check database connection first
+    const dbModule = require('./config/db');
 
-      logger.info('Attempting to run database migrations...');
-      const { initializeDatabase } = require('./config/railway-db-init');
-      await initializeDatabase();
-      logger.info('Database migrations completed successfully');
+    // Wait for database to be available with exponential backoff
+    let dbReady = false;
+    let attempts = 0;
+    const maxAttempts = 5;
 
-      // Initialize MQTT service only after database is ready
-      logger.info('Initializing MQTT connection...');
-      require('./firebase/mqttService');
-    } catch (error) {
-      logger.error('Failed to run migrations:', error);
+    while (!dbReady && attempts < maxAttempts) {
+      try {
+        logger.info(`Checking database connection (attempt ${attempts + 1}/${maxAttempts})...`);
+        await dbModule.pool.query('SELECT 1');
+        dbReady = true;
+        logger.info('Database connection successful');
+      } catch (error) {
+        attempts++;
+        const delay = Math.pow(2, attempts) * 1000; // Exponential backoff
+        logger.warn(`Database connection failed, retrying in ${delay}ms: ${error.message}`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
     }
-  } else {
-    // In development without migrations, still initialize MQTT
+
+    if (!dbReady) {
+      logger.error('Failed to connect to database after multiple attempts');
+      throw new Error('Database connection failed');
+    }
+
+    // Always run migrations in production, or if explicitly enabled
+    if ((process.env.DATABASE_URL || process.env.PGDATABASE) &&
+      (process.env.NODE_ENV === 'production' || process.env.RUN_MIGRATIONS === 'true')) {
+      try {
+        logger.info('Attempting to run database migrations...');
+        const { initializeDatabase } = require('./config/railway-db-init');
+        await initializeDatabase();
+        logger.info('Database migrations completed successfully');
+      } catch (error) {
+        logger.error('Failed to run migrations:', error);
+        throw error; // Re-throw to prevent MQTT initialization if migrations fail
+      }
+    }
+
+    // Check if required tables exist before initializing MQTT
+    const tablesExist = await dbModule.testDatabaseReady();
+    if (!tablesExist) {
+      logger.error('Required database tables do not exist. Please run migrations.');
+      throw new Error('Database schema not ready');
+    }
+
+    // Initialize MQTT service only after database is ready
+    logger.info('Database ready, initializing MQTT connection...');
     require('./firebase/mqttService');
+    logger.info('Server initialization complete');
+  } catch (error) {
+    logger.error('Server initialization error:', error);
+    logger.error('MQTT service will not be initialized due to database issues.');
   }
 });
 

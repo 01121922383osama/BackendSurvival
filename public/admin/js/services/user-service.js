@@ -9,39 +9,19 @@ const API_BASE_URL = '';
 class UserService {
   async _getAuthHeaders() {
     console.log('Getting auth headers...');
-    if (!window.app || !window.app.authReady) {
-      throw new Error('App not initialized');
-    }
-
-    console.log('Waiting for auth ready...');
-    await window.app.authReady; // Wait for authentication to be ready
-    console.log('Auth is ready.');
-
-    // Check if we have a current user
-    const currentUser = auth.currentUser;
-    if (!currentUser) {
-      console.log('No current user found, redirecting to login');
-      localStorage.removeItem('token');
-      window.location.hash = '#/login';
+    
+    // Use local JWT token instead of Firebase
+    const token = localStorage.getItem('token');
+    if (!token) {
+      console.log('No token found, redirecting to login');
+      window.location.href = '/admin/login.html';
       throw new Error('User not authenticated.');
     }
 
-    try {
-      // Always get a fresh token from Firebase
-      console.log('Getting fresh token from Firebase...');
-      const token = await currentUser.getIdToken(true); // Force refresh
-      localStorage.setItem('token', token);
-
-      return {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      };
-    } catch (error) {
-      console.error('Failed to get token:', error);
-      localStorage.removeItem('token');
-      window.location.hash = '#/login';
-      throw new Error('Failed to get authentication token.');
-    }
+    return {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    };
   }
 
   // Helper method to check if token might be expired

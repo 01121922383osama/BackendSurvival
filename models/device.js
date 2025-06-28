@@ -173,6 +173,18 @@ const getDeviceUsers = async (deviceId) => {
   }
 };
 
+const getDeviceStats = async (req, res) => {
+  try {
+    const allDevices = await getAllDevices();
+    const total = allDevices.length;
+    const online = allDevices.filter(d => d.is_connected).length;
+    const offline = total - online;
+    res.json({ total, online, offline, devices: allDevices });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get device stats' });
+  }
+};
+
 module.exports = {
   createDevice,
   getDeviceBySerialNumber,
@@ -182,5 +194,6 @@ module.exports = {
   deleteDevice,
   assignDeviceToUser,
   removeDeviceFromUser,
-  getDeviceUsers
+  getDeviceUsers,
+  getDeviceStats
 }; 

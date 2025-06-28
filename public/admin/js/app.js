@@ -20,37 +20,29 @@ class App {
   }
 
   handleAuthentication() {
-    onAuthStateChanged(this.auth, async (user) => {
-      if (user) {
-        await this.onLogin(user);
-        this.resolveAuthReady();
-      } else {
-        this.onLogout();
-      }
-    });
+    // Check for local JWT token instead of Firebase
+    const token = localStorage.getItem('token');
+    if (token) {
+      this.onLogin();
+      this.resolveAuthReady();
+    } else {
+      this.onLogout();
+    }
   }
 
-  async onLogin(user) {
+  async onLogin() {
     try {
-      // Get a fresh token
-      const token = await user.getIdToken(true);
-      localStorage.setItem('token', token);
-      
       // Update UI for logged in state
       document.body.classList.remove('logged-out');
       document.body.classList.add('logged-in');
-
-      const userEmailElement = document.getElementById('user-email');
-      if (userEmailElement) {
-        userEmailElement.textContent = user.email;
-      }
 
       const logoutBtn = document.getElementById('logout-btn');
       if (logoutBtn) {
         logoutBtn.addEventListener('click', async (e) => {
           e.preventDefault();
           try {
-            await signOut(this.auth);
+            localStorage.removeItem('token');
+            this.onLogout();
             showToast('Success', 'You have been logged out.');
           } catch (error) {
             console.error('Logout failed:', error);
@@ -64,7 +56,7 @@ class App {
     } catch (error) {
       console.error('Login process failed:', error);
       showToast('Error', 'Login failed. Please try again.', 'danger');
-      await signOut(this.auth);
+      this.onLogout();
     }
   }
 
@@ -72,8 +64,7 @@ class App {
     document.body.classList.remove('logged-in');
     document.body.classList.add('logged-out');
     localStorage.removeItem('token');
-    window.location.hash = '#/login';
-    this.router.loadRoute();
+    window.location.href = '/admin/login.html';
   }
 }
 

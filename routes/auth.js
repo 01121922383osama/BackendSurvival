@@ -147,6 +147,11 @@ router.post('/signup', authLimiter, validateSignup, authController.signup);
  */
 router.post('/login', authLimiter, validateLogin, authController.login);
 
+// GET route for login page - redirect to admin login
+router.get('/login', (req, res) => {
+  res.redirect('/admin/login.html');
+});
+
 /**
  * @swagger
  * /firebase-signup:
