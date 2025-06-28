@@ -3,9 +3,9 @@ const cors = require('cors');
 require('dotenv').config();
 const path = require('path');
 
-// Import Firebase and MQTT services
+// Import Firebase
 require('./firebase/firebaseInit');
-require('./firebase/mqttService');
+// MQTT service will be initialized after database setup
 
 // Import routes, middleware and config
 const authRoutes = require('./routes/auth');
@@ -75,24 +75,30 @@ app.use(errorHandler);
 
 // Start server
 const PORT = process.env.PORT || 3000;
-const server = app.listen(PORT, () => {
+const server = app.listen(PORT, async () => {
   logger.info(`Server running on port ${PORT}`);
   logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
 
-  // Run database migrations after server has started (for Railway)
-  if (process.env.DATABASE_URL && process.env.RUN_MIGRATIONS === 'true') {
-    // Wait a bit to ensure database is ready
-    setTimeout(() => {
-      try {
-        logger.info('Attempting to run database migrations...');
-        const { initializeDatabase } = require('./config/railway-db-init');
-        initializeDatabase()
-          .then(() => logger.info('Database migrations completed successfully'))
-          .catch(err => logger.error('Error running migrations:', err));
-      } catch (error) {
-        logger.error('Failed to run migrations:', error);
-      }
-    }, 5000); // Wait 5 seconds before attempting migrations
+  // Always run migrations in production, or if explicitly enabled
+  if (process.env.DATABASE_URL && (process.env.NODE_ENV === 'production' || process.env.RUN_MIGRATIONS === 'true')) {
+    try {
+      // Wait a bit to ensure database is ready
+      await new Promise(resolve => setTimeout(resolve, 5000));
+
+      logger.info('Attempting to run database migrations...');
+      const { initializeDatabase } = require('./config/railway-db-init');
+      await initializeDatabase();
+      logger.info('Database migrations completed successfully');
+
+      // Initialize MQTT service only after database is ready
+      logger.info('Initializing MQTT connection...');
+      require('./firebase/mqttService');
+    } catch (error) {
+      logger.error('Failed to run migrations:', error);
+    }
+  } else {
+    // In development without migrations, still initialize MQTT
+    require('./firebase/mqttService');
   }
 });
 
