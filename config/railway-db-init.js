@@ -32,13 +32,20 @@ async function initializeDatabase() {
   try {
     // Read SQL files
     const initSqlPath = path.join(__dirname, 'init.sql');
+    const topicMigrationPath = path.join(__dirname, 'topic-migration.sql');
     const optimizeSqlPath = path.join(__dirname, 'db-optimize.sql');
     
-    const initSqlScript = fs.readFileSync(initSqlPath, 'utf8');
-    
     // Execute init SQL script
+    const initSqlScript = fs.readFileSync(initSqlPath, 'utf8');
     await pool.query(initSqlScript);
     logger.info('Database tables created successfully');
+    
+    // Execute topic migration SQL to ensure topic column exists
+    if (fs.existsSync(topicMigrationPath)) {
+      const topicMigrationScript = fs.readFileSync(topicMigrationPath, 'utf8');
+      await pool.query(topicMigrationScript);
+      logger.info('Topic column migration applied successfully');
+    }
     
     // Execute optimization SQL if it exists
     if (fs.existsSync(optimizeSqlPath)) {
@@ -53,7 +60,7 @@ async function initializeDatabase() {
   } catch (error) {
     logger.error('Error initializing database:', error);
     await pool.end();
-    process.exit(1);
+    throw error; // Let the caller handle the error
   }
 }
 
