@@ -1,6 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-require('dotenv').config();
+require('dotenv').config({ path: './temp.env' });
 const path = require('path');
 
 // Import Firebase
@@ -12,12 +12,103 @@ const authRoutes = require('./routes/auth');
 const logRoutes = require('./routes/logs');
 const userRoutes = require('./routes/users');
 const deviceRoutes = require('./routes/devices');
+const firebaseUserRoutes = require('./routes/firebase-users');
 const errorHandler = require('./middleware/errorHandler');
 const logger = require('./config/logger');
 const { swaggerUi, swaggerDocs } = require('./config/swagger');
 
+// WebSocket support
+const http = require('http');
+const WebSocket = require('ws');
+
 // Initialize express app
 const app = express();
+const httpServer = http.createServer(app);
+
+// Create WebSocket server
+const wss = new WebSocket.Server({ server: httpServer });
+
+// Store connected clients
+const connectedClients = new Set();
+
+// WebSocket connection handling
+wss.on('connection', (ws) => {
+  logger.info('New WebSocket client connected');
+  connectedClients.add(ws);
+
+  // Send initial data to the client
+  ws.send(JSON.stringify({
+    type: 'connection',
+    message: 'Connected to real-time dashboard'
+  }));
+
+  ws.on('close', () => {
+    logger.info('WebSocket client disconnected');
+    connectedClients.delete(ws);
+  });
+
+  ws.on('error', (error) => {
+    logger.error('WebSocket error:', error);
+    connectedClients.delete(ws);
+  });
+});
+
+// Function to broadcast data to all connected clients
+function broadcastToClients(data) {
+  const message = JSON.stringify(data);
+  connectedClients.forEach((client) => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(message);
+    }
+  });
+}
+
+// Make broadcast function available globally
+global.broadcastToClients = broadcastToClients;
+
+// Function to broadcast dashboard statistics
+async function broadcastDashboardStats() {
+  try {
+    const deviceModel = require('./models/device');
+    const logModel = require('./models/log');
+    const admin = require('./firebase/firebaseInit');
+    
+    // Get Firebase users count directly
+    let firebaseUsersCount = 0;
+    try {
+      const listUsersResult = await admin.auth().listUsers();
+      firebaseUsersCount = listUsersResult.users.length;
+    } catch (error) {
+      logger.error('Error getting Firebase users count:', error);
+      firebaseUsersCount = 0;
+    }
+    
+    // Get statistics
+    const devices = await deviceModel.getAllDevices();
+    const recentLogs = await logModel.getRecentLogs(10);
+    
+    const stats = {
+      type: 'dashboard_stats',
+      data: {
+        totalUsers: firebaseUsersCount,
+        totalDevices: devices.length,
+        onlineDevices: devices.filter(d => d.is_connected).length,
+        offlineDevices: devices.filter(d => !d.is_connected).length,
+        devicesWithAlerts: devices.filter(d => d.has_alert).length,
+        recentLogs: recentLogs.length,
+        lastUpdated: new Date().toISOString()
+      }
+    };
+    
+    broadcastToClients(stats);
+    // logger.debug('Broadcasted dashboard statistics');
+  } catch (error) {
+    logger.error('Error broadcasting dashboard stats:', error);
+  }
+}
+
+// Broadcast dashboard stats every 60 seconds (reduced frequency)
+setInterval(broadcastDashboardStats, 60000);
 
 // Trust proxy - required for Railway deployment with rate limiting
 app.set('trust proxy', 1);
@@ -48,6 +139,7 @@ app.use('/', authRoutes); // /signup, /login, /profile routes
 app.use('/logs', logRoutes);
 app.use('/users', userRoutes);
 app.use('/devices', deviceRoutes);
+app.use('/firebase-users', firebaseUserRoutes);
 
 // API Documentation with Swagger UI
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocs, {
@@ -70,12 +162,9 @@ app.get('/mqtt/status', (req, res) => {
 // Error handling middleware
 app.use(errorHandler);
 
-// Database initialization for Railway if needed
-// We'll attempt this after the server starts, not during build
-
 // Start server
 const PORT = process.env.PORT || 3000;
-const server = app.listen(PORT, async () => {
+httpServer.listen(PORT, async () => {
   logger.info(`Server running on port ${PORT}`);
   logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
 

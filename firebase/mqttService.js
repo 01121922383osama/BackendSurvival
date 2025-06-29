@@ -50,7 +50,7 @@ client.on('connect', () => {
 client.on('message', async (topic, message) => {
   try {
     const payload = JSON.parse(message.toString());
-    logger.debug(`MQTT message received on topic ${topic}:`, payload);
+    // logger.debug(`MQTT message received on topic ${topic}:`, payload);
 
     const topicParts = topic.split('/');
     if (topicParts.length < 3) {
@@ -132,7 +132,25 @@ const processDeviceMessage = async (deviceId, topic, payload) => {
 
     await deviceModel.updateDevice(deviceId, updateData);
     
-    logger.debug(`Updated device ${deviceId} status:`, updateData);
+    // logger.debug(`Updated device ${deviceId} status:`, updateData);
+
+    // Broadcast real-time update to connected WebSocket clients
+    if (global.broadcastToClients) {
+      const realTimeUpdate = {
+        type: 'device_update',
+        deviceId: deviceId,
+        data: {
+          ...updateData,
+          serialNumber: deviceId,
+          name: device.name || `Device ${deviceId}`,
+          location: device.location || 'Unknown'
+        },
+        timestamp: new Date().toISOString()
+      };
+      
+      global.broadcastToClients(realTimeUpdate);
+      // logger.debug(`Broadcasted device update for ${deviceId}`);
+    }
   } catch (error) {
     logger.error(`Error processing device message for ${deviceId}:`, error);
   }
@@ -152,7 +170,7 @@ const saveLogToDatabase = async (deviceId, topic, payload) => {
       statusColor
     );
     
-    logger.debug(`Saved log to database for device ${deviceId}`);
+    // logger.debug(`Saved log to database for device ${deviceId}`);
   } catch (error) {
     logger.error(`Error saving log to database for device ${deviceId}:`, error);
   }

@@ -1,8 +1,12 @@
 import { showToast } from '../utils/toast.js';
+import realtimeService from '../services/realtime-service.js';
 
 function getToken() {
   return localStorage.getItem('token');
 }
+
+// Store current devices data
+let devicesData = [];
 
 function renderDevices() {
   const devicesSection = document.getElementById('devices-section');
@@ -21,6 +25,11 @@ function renderDevices() {
         <button type="button" class="btn btn-sm btn-success" id="refresh-devices-btn">
           <i class="fas fa-sync-alt"></i> Refresh
         </button>
+        <div class="ms-2">
+          <span class="badge bg-success" id="realtime-status">
+            <i class="fas fa-wifi"></i> Real-time
+          </span>
+        </div>
       </div>
     </div>
     <div class="row" id="devices-list">
@@ -76,22 +85,8 @@ async function loadOnlineDevices() {
     }
 
     const data = await response.json();
-    const devices = data.devices || [];
-
-    if (loadingIndicator) loadingIndicator.classList.add('d-none');
-
-    if (devices.length === 0) {
-      if (emptyIndicator) emptyIndicator.classList.remove('d-none');
-      return;
-    }
-
-    // Render device cards
-    devices.forEach(device => {
-      const deviceCard = createDeviceCard(device);
-      if (devicesList) devicesList.appendChild(deviceCard);
-    });
-
-    showToast('Success', `Loaded ${devices.length} online device(s)`, 'success');
+    devicesData = data.devices || [];
+    updateDevicesDisplay();
 
   } catch (error) {
     console.error('Error loading online devices:', error);
@@ -101,9 +96,34 @@ async function loadOnlineDevices() {
   }
 }
 
+// Update devices display with current data
+function updateDevicesDisplay() {
+  const loadingIndicator = document.getElementById('devices-loading-section');
+  const emptyIndicator = document.getElementById('devices-empty-section');
+  const devicesList = document.getElementById('devices-list');
+
+  if (loadingIndicator) loadingIndicator.classList.add('d-none');
+
+  if (devicesData.length === 0) {
+    if (emptyIndicator) emptyIndicator.classList.remove('d-none');
+    if (devicesList) devicesList.innerHTML = '';
+    return;
+  }
+
+  if (emptyIndicator) emptyIndicator.classList.add('d-none');
+  if (devicesList) devicesList.innerHTML = '';
+
+  // Render device cards
+  devicesData.forEach(device => {
+    const deviceCard = createDeviceCard(device);
+    if (devicesList) devicesList.appendChild(deviceCard);
+  });
+}
+
 function createDeviceCard(device) {
   const card = document.createElement('div');
   card.className = 'col-md-6 col-lg-4 mb-4';
+  card.setAttribute('data-device-id', device.serial_number);
   
   const lastUpdated = device.last_updated ? new Date(device.last_updated).toLocaleString() : 'Unknown';
   const statusClass = device.has_alert ? 'border-warning' : 'border-success';
@@ -165,6 +185,36 @@ function createDeviceCard(device) {
   return card;
 }
 
+// Handle real-time device updates
+function handleDeviceUpdate(data) {
+  console.log('Real-time device update received in devices page:', data);
+  
+  const deviceIndex = devicesData.findIndex(d => d.serial_number === data.deviceId);
+  
+  if (deviceIndex !== -1) {
+    // Update existing device
+    devicesData[deviceIndex] = { ...devicesData[deviceIndex], ...data.data };
+  } else {
+    // Add new device if it's online
+    if (data.data.isConnected) {
+      devicesData.push({
+        serial_number: data.deviceId,
+        name: data.data.name || `Device ${data.deviceId}`,
+        location: data.data.location || 'Unknown',
+        ...data.data
+      });
+    }
+  }
+  
+  // Update display
+  updateDevicesDisplay();
+  
+  // Show notification for alerts
+  if (data.data.hasAlert) {
+    showToast(`Alert: ${data.data.alertMessage || 'Device alert'}`, 'warning');
+  }
+}
+
 function handleDeviceSearch() {
   const searchTerm = document.getElementById('device-search').value.toLowerCase();
   const deviceCards = document.querySelectorAll('#devices-list .col-md-6');
@@ -179,6 +229,34 @@ function handleDeviceSearch() {
       card.style.display = 'none';
     }
   });
+}
+
+// Update real-time status indicator
+function updateRealtimeStatus() {
+  const statusBadge = document.getElementById('realtime-status');
+  if (!statusBadge) return;
+  
+  const connectionStatus = realtimeService.getConnectionStatus();
+  
+  if (connectionStatus.isConnected) {
+    statusBadge.className = 'badge bg-success';
+    statusBadge.innerHTML = '<i class="fas fa-wifi"></i> Real-time';
+  } else {
+    statusBadge.className = 'badge bg-warning';
+    statusBadge.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Connecting...';
+  }
+}
+
+// Initialize real-time updates
+function initializeRealtimeUpdates() {
+  // Listen for device updates
+  realtimeService.on('device_update', handleDeviceUpdate);
+  
+  // Update status indicator
+  updateRealtimeStatus();
+  
+  // Update status every 5 seconds
+  setInterval(updateRealtimeStatus, 5000);
 }
 
 // Global functions for device actions
@@ -197,6 +275,19 @@ export function loadDevices() {
   renderDevices();
   loadOnlineDevices();
   
-  // Set up auto-refresh every 30 seconds
-  setInterval(loadOnlineDevices, 30000);
+  // Initialize real-time updates
+  initializeRealtimeUpdates();
+  
+  // Fallback polling every 60 seconds (much less frequent since we have real-time)
+  setInterval(() => {
+    // Only poll if WebSocket is not connected
+    if (!realtimeService.getConnectionStatus().isConnected) {
+      loadOnlineDevices();
+    }
+  }, 60000);
+}
+
+// Cleanup function
+export function cleanupDevices() {
+  realtimeService.off('device_update', handleDeviceUpdate);
 }

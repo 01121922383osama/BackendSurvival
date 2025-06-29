@@ -1,20 +1,42 @@
 import { showToast } from '../utils/toast.js';
+import realtimeService from '../services/realtime-service.js';
 
 // Utility to get token
 function getToken() {
   return localStorage.getItem('token');
 }
 
+// Store current dashboard data
+let dashboardData = {
+  users: [],
+  devices: [],
+  logs: [],
+  stats: {
+    totalUsers: 0,
+    totalDevices: 0,
+    onlineDevices: 0,
+    alertsCount: 0
+  }
+};
+
 // Fetch and display total users
 async function loadTotalUsers() {
   const token = getToken();
   if (!token) return;
-  const res = await fetch('/users', {
-    headers: { 'Authorization': 'Bearer ' + token }
-  });
-  if (!res.ok) return;
-  const data = await res.json();
-  document.getElementById('total-users-count').textContent = data.users.length;
+  
+  try {
+    // Get Firebase users instead of local database users
+    const res = await fetch('/firebase-users', {
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    dashboardData.users = data.users || [];
+    dashboardData.stats.totalUsers = dashboardData.users.length;
+    document.getElementById('total-users-count').textContent = dashboardData.stats.totalUsers;
+  } catch (error) {
+    console.error('Error loading Firebase users:', error);
+  }
 }
 
 // Fetch and display devices as cards
@@ -29,77 +51,88 @@ async function loadDevices() {
     });
     if (!res.ok) return;
     const data = await res.json();
-    const devices = data.devices || data;
-    const deviceStatusCards = document.getElementById('device-status-cards');
-    if (!deviceStatusCards) return;
-
-    deviceStatusCards.innerHTML = '';
-    let onlineCount = 0;
-    let alertCount = 0;
-    
-    devices.forEach(device => {
-      // Check if device is online based on is_connected field
-      const isOnline = device.is_connected === true;
-      const hasAlert = device.has_alert === true;
-      
-      if (isOnline) onlineCount++;
-      if (hasAlert) alertCount++;
-      
-      let cardColor = 'bg-secondary';
-      let statusText = 'Offline';
-      
-      if (isOnline && hasAlert) {
-        cardColor = 'bg-warning text-dark';
-        statusText = 'Alert';
-      } else if (isOnline) {
-        cardColor = 'bg-success text-white';
-        statusText = 'Online';
-      } else {
-        cardColor = 'bg-danger text-white';
-        statusText = 'Offline';
-      }
-      
-      const lastUpdated = device.last_updated ? new Date(device.last_updated).toLocaleString() : 'Unknown';
-      
-      deviceStatusCards.innerHTML += `
-        <div class="col-md-4 mb-3">
-          <div class="card ${cardColor}">
-            <div class="card-body">
-              <h5 class="card-title">
-                <i class="fas fa-microchip me-2"></i>
-                ${device.name || device.serial_number}
-              </h5>
-              <p class="card-text">
-                <strong>Status:</strong> ${statusText}
-              </p>
-              <p class="card-text">
-                <strong>Device ID:</strong> ${device.serial_number}
-              </p>
-              <p class="card-text">
-                <strong>Location:</strong> ${device.location || 'Unknown'}
-              </p>
-              <p class="card-text">
-                <strong>Last Updated:</strong> ${lastUpdated}
-              </p>
-              ${device.alert_message ? `
-              <div class="alert alert-warning alert-sm mb-0">
-                <i class="fas fa-exclamation-triangle me-1"></i>
-                ${device.alert_message}
-              </div>
-              ` : ''}
-            </div>
-          </div>
-        </div>
-      `;
-    });
-    
-    document.getElementById('active-devices-count').textContent = devices.length;
-    document.getElementById('online-devices-count').textContent = onlineCount;
-    document.getElementById('alerts-count').textContent = alertCount;
+    dashboardData.devices = data.devices || data;
+    updateDeviceDisplay();
     
   } catch (error) {
     console.error('Error loading devices:', error);
   }
+}
+
+// Update device display with current data
+function updateDeviceDisplay() {
+  const devices = dashboardData.devices;
+  const deviceStatusCards = document.getElementById('device-status-cards');
+  if (!deviceStatusCards) return;
+
+  deviceStatusCards.innerHTML = '';
+  let onlineCount = 0;
+  let alertCount = 0;
+  
+  devices.forEach(device => {
+    // Check if device is online based on is_connected field
+    const isOnline = device.is_connected === true;
+    const hasAlert = device.has_alert === true;
+    
+    if (isOnline) onlineCount++;
+    if (hasAlert) alertCount++;
+    
+    let cardColor = 'bg-secondary';
+    let statusText = 'Offline';
+    
+    if (isOnline && hasAlert) {
+      cardColor = 'bg-warning text-dark';
+      statusText = 'Alert';
+    } else if (isOnline) {
+      cardColor = 'bg-success text-white';
+      statusText = 'Online';
+    } else {
+      cardColor = 'bg-danger text-white';
+      statusText = 'Offline';
+    }
+    
+    const lastUpdated = device.last_updated ? new Date(device.last_updated).toLocaleString() : 'Unknown';
+    
+    deviceStatusCards.innerHTML += `
+      <div class="col-md-4 mb-3">
+        <div class="card ${cardColor}">
+          <div class="card-body">
+            <h5 class="card-title">
+              <i class="fas fa-microchip me-2"></i>
+              ${device.name || device.serial_number}
+            </h5>
+            <p class="card-text">
+              <strong>Status:</strong> ${statusText}
+            </p>
+            <p class="card-text">
+              <strong>Device ID:</strong> ${device.serial_number}
+            </p>
+            <p class="card-text">
+              <strong>Location:</strong> ${device.location || 'Unknown'}
+            </p>
+            <p class="card-text">
+              <strong>Last Updated:</strong> ${lastUpdated}
+            </p>
+            ${device.alert_message ? `
+            <div class="alert alert-warning alert-sm mb-0">
+              <i class="fas fa-exclamation-triangle me-1"></i>
+              ${device.alert_message}
+            </div>
+            ` : ''}
+          </div>
+        </div>
+      </div>
+    `;
+  });
+  
+  // Update dashboard stats
+  dashboardData.stats.totalDevices = devices.length;
+  dashboardData.stats.onlineDevices = onlineCount;
+  dashboardData.stats.alertsCount = alertCount;
+  
+  document.getElementById('active-devices-count').textContent = dashboardData.stats.totalDevices;
+  document.getElementById('online-devices-count').textContent = dashboardData.stats.onlineDevices;
+  document.getElementById('alerts-count').textContent = dashboardData.stats.alertsCount;
 }
 
 // Fetch and display logs as cards
@@ -111,14 +144,18 @@ async function loadLogs() {
   });
   if (!res.ok) return;
   const data = await res.json();
-  const logs = data.logs || data;
+  dashboardData.logs = data.logs || data;
+  updateLogsDisplay();
+}
+
+// Update logs display with current data
+function updateLogsDisplay() {
+  const logs = dashboardData.logs;
   const logsSection = document.getElementById('logs-section');
   if (!logsSection) return;
 
   let logsHtml = '<div class="row">';
   logs.forEach(log => {
-    // Debug log
-    console.log('Log:', log);
     let status = (log.status || '').toString().trim().toLowerCase();
     let cardColor = 'bg-light';
     if (status === 'online') cardColor = 'bg-success text-white';
@@ -140,29 +177,129 @@ async function loadLogs() {
   });
   logsHtml += '</div>';
   logsSection.innerHTML = logsHtml;
-  // Note: Alerts count is now handled in loadDevices function
 }
 
-// Main dashboard loader with polling for real-time updates
-let dashboardInterval = null;
+// Handle real-time device updates
+function handleDeviceUpdate(data) {
+  console.log('Real-time device update received:', data);
+  
+  // Update device in local data
+  const deviceIndex = dashboardData.devices.findIndex(d => d.serial_number === data.deviceId);
+  if (deviceIndex !== -1) {
+    dashboardData.devices[deviceIndex] = { ...dashboardData.devices[deviceIndex], ...data.data };
+  } else {
+    // Add new device if it doesn't exist
+    dashboardData.devices.push({
+      serial_number: data.deviceId,
+      name: data.data.name || `Device ${data.deviceId}`,
+      location: data.data.location || 'Unknown',
+      ...data.data
+    });
+  }
+  
+  // Update display immediately
+  updateDeviceDisplay();
+  
+  // Show notification for alerts
+  if (data.data.hasAlert) {
+    showToast(`Alert: ${data.data.alertMessage || 'Device alert'}`, 'warning');
+  }
+  
+  // Add to recent logs
+  const newLog = {
+    device_id: data.deviceId,
+    timestamp: data.timestamp,
+    status: data.data.hasAlert ? 'alert' : (data.data.isConnected ? 'online' : 'offline'),
+    params: data.data
+  };
+  
+  dashboardData.logs.unshift(newLog);
+  if (dashboardData.logs.length > 10) {
+    dashboardData.logs = dashboardData.logs.slice(0, 10);
+  }
+  updateLogsDisplay();
+}
+
+// Handle dashboard statistics updates
+function handleDashboardStats(data) {
+  console.log('Dashboard statistics update received:', data);
+  
+  // Update dashboard statistics
+  const stats = data.data;
+  dashboardData.stats = {
+    totalUsers: stats.totalUsers,
+    totalDevices: stats.totalDevices,
+    onlineDevices: stats.onlineDevices,
+    alertsCount: stats.devicesWithAlerts
+  };
+  
+  // Update dashboard counters
+  document.getElementById('total-users-count').textContent = stats.totalUsers;
+  document.getElementById('active-devices-count').textContent = stats.totalDevices;
+  document.getElementById('online-devices-count').textContent = stats.onlineDevices;
+  document.getElementById('alerts-count').textContent = stats.devicesWithAlerts;
+  
+  // Add a subtle visual indicator that data was updated
+  const counters = document.querySelectorAll('#total-users-count, #active-devices-count, #online-devices-count, #alerts-count');
+  counters.forEach(counter => {
+    counter.style.transition = 'background-color 0.3s ease';
+    counter.style.backgroundColor = '#e8f5e8';
+    setTimeout(() => {
+      counter.style.backgroundColor = '';
+    }, 300);
+  });
+}
+
+// Initialize real-time updates
+function initializeRealtimeUpdates() {
+  // Listen for device updates
+  realtimeService.on('device_update', handleDeviceUpdate);
+  
+  // Listen for dashboard statistics updates
+  realtimeService.on('dashboard_stats', handleDashboardStats);
+  
+  // Show connection status
+  const connectionStatus = realtimeService.getConnectionStatus();
+  if (connectionStatus.isConnected) {
+    showToast('Real-time updates connected', 'success');
+  } else {
+    showToast('Connecting to real-time updates...', 'info');
+  }
+}
+
+// Main dashboard loader with real-time updates
 export function loadDashboard() {
   // Initial load
   loadTotalUsers();
   loadDevices();
   loadLogs();
+  
+  // Initialize real-time updates
+  initializeRealtimeUpdates();
+  
+  // Fallback polling every 30 seconds (much less frequent since we have real-time)
+  setInterval(() => {
+    // Only poll if WebSocket is not connected
+    if (!realtimeService.getConnectionStatus().isConnected) {
+      loadTotalUsers();
+      loadDevices();
+      loadLogs();
+    }
+  }, 30000); // 30 seconds
+}
 
-  // Clear any previous interval
-  if (dashboardInterval) clearInterval(dashboardInterval);
-
-  // Poll every 5 seconds
-  dashboardInterval = setInterval(() => {
-    loadTotalUsers();
-    loadDevices();
-    loadLogs();
-  }, 5000); // 5000 ms = 5 seconds
+// Cleanup function
+export function cleanupDashboard() {
+  realtimeService.off('device_update', handleDeviceUpdate);
+  realtimeService.off('dashboard_stats', handleDashboardStats);
 }
 
 // Call this on dashboard load
 window.addEventListener('DOMContentLoaded', () => {
   loadDashboard();
+});
+
+// Cleanup on page unload
+window.addEventListener('beforeunload', () => {
+  cleanupDashboard();
 });

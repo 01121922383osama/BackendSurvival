@@ -1,4 +1,3 @@
-import { auth } from '../firebase-config.js';
 import { showToast } from '../utils/toast.js';
 
 // Use relative URLs for same-origin requests
@@ -51,10 +50,10 @@ class UserService {
 
   async getAllUsers() {
     try {
-      console.log('Fetching all users...');
+      console.log('Fetching all Firebase users...');
       const headers = await this._getAuthHeaders();
-      console.log(`Auth headers obtained, fetching from ${API_BASE_URL}/users`);
-      const response = await fetch(`${API_BASE_URL}/users`, { headers });
+      console.log(`Auth headers obtained, fetching from ${API_BASE_URL}/firebase-users`);
+      const response = await fetch(`${API_BASE_URL}/firebase-users`, { headers });
 
       if (!response.ok) {
         // Handle 401 errors specifically for token issues
@@ -64,7 +63,7 @@ class UserService {
           localStorage.removeItem('token');
           // Try again with fresh token
           const freshHeaders = await this._getAuthHeaders();
-          const retryResponse = await fetch(`${API_BASE_URL}/users`, { headers: freshHeaders });
+          const retryResponse = await fetch(`${API_BASE_URL}/firebase-users`, { headers: freshHeaders });
 
           if (!retryResponse.ok) {
             const retryErrorBody = await retryResponse.json().catch(() => ({ error: 'Failed to parse error response.' }));
@@ -72,7 +71,7 @@ class UserService {
           }
 
           const retryData = await retryResponse.json();
-          console.log('Users fetched successfully after token refresh.');
+          console.log('Firebase users fetched successfully after token refresh.');
           return retryData.users;
         }
 
@@ -81,7 +80,7 @@ class UserService {
       }
 
       const data = await response.json();
-      console.log('Users fetched successfully.');
+      console.log('Firebase users fetched successfully.');
       return data.users;
     } catch (error) {
       console.error('Error in getAllUsers:', error);
@@ -90,10 +89,10 @@ class UserService {
     }
   }
 
-  async getUser(userId) {
+  async getUser(uid) {
     try {
       const headers = await this._getAuthHeaders();
-      const response = await fetch(`${API_BASE_URL}/users/${userId}`, { headers });
+      const response = await fetch(`${API_BASE_URL}/firebase-users/${uid}`, { headers });
 
       if (!response.ok) {
         // Handle 401 errors specifically for token issues
@@ -103,7 +102,7 @@ class UserService {
           localStorage.removeItem('token');
           // Try again with fresh token
           const freshHeaders = await this._getAuthHeaders();
-          const retryResponse = await fetch(`${API_BASE_URL}/users/${userId}`, { headers: freshHeaders });
+          const retryResponse = await fetch(`${API_BASE_URL}/firebase-users/${uid}`, { headers: freshHeaders });
 
           if (!retryResponse.ok) {
             const retryErrorBody = await retryResponse.json().catch(() => ({ error: 'Failed to parse error response.' }));
@@ -130,18 +129,31 @@ class UserService {
 
   async createUser(userData) {
     try {
-      const response = await fetch(`${API_BASE_URL}/signup`, {
+      console.log('UserService.createUser called with:', { ...userData, password: '***' });
+      
+      const headers = await this._getAuthHeaders();
+      console.log('Headers obtained:', { ...headers, Authorization: headers.Authorization ? 'Bearer ***' : 'none' });
+      
+      const requestBody = JSON.stringify(userData);
+      console.log('Request body:', requestBody);
+      
+      const response = await fetch(`${API_BASE_URL}/firebase-users`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(userData),
+        headers,
+        body: requestBody,
       });
+      
+      console.log('Response status:', response.status);
+      console.log('Response ok:', response.ok);
+      
       if (!response.ok) {
         const errorData = await response.json();
+        console.error('Error response:', errorData);
         throw new Error(errorData.error || 'Failed to create user');
       }
+      
       const data = await response.json();
+      console.log('Success response:', data);
       showToast('Success', 'User created successfully!', 'success');
       return data.user;
     } catch (error) {
@@ -151,10 +163,10 @@ class UserService {
     }
   }
 
-  async updateUser(userId, userData) {
+  async updateUser(uid, userData) {
     try {
       const headers = await this._getAuthHeaders();
-      const response = await fetch(`${API_BASE_URL}/users/${userId}`, {
+      const response = await fetch(`${API_BASE_URL}/firebase-users/${uid}`, {
         method: 'PUT',
         headers,
         body: JSON.stringify(userData),
@@ -168,7 +180,7 @@ class UserService {
           localStorage.removeItem('token');
           // Try again with fresh token
           const freshHeaders = await this._getAuthHeaders();
-          const retryResponse = await fetch(`${API_BASE_URL}/users/${userId}`, {
+          const retryResponse = await fetch(`${API_BASE_URL}/firebase-users/${uid}`, {
             method: 'PUT',
             headers: freshHeaders,
             body: JSON.stringify(userData),
@@ -195,10 +207,10 @@ class UserService {
     }
   }
 
-  async deleteUser(userId) {
+  async deleteUser(uid) {
     try {
       const headers = await this._getAuthHeaders();
-      const response = await fetch(`${API_BASE_URL}/users/${userId}`, {
+      const response = await fetch(`${API_BASE_URL}/firebase-users/${uid}`, {
         method: 'DELETE',
         headers,
       });
@@ -211,7 +223,7 @@ class UserService {
           localStorage.removeItem('token');
           // Try again with fresh token
           const freshHeaders = await this._getAuthHeaders();
-          const retryResponse = await fetch(`${API_BASE_URL}/users/${userId}`, {
+          const retryResponse = await fetch(`${API_BASE_URL}/firebase-users/${uid}`, {
             method: 'DELETE',
             headers: freshHeaders,
           });
@@ -234,6 +246,49 @@ class UserService {
     } catch (error) {
       console.error('Error deleting user:', error);
       showToast('Error', `Could not delete user: ${error.message}`, 'danger');
+    }
+  }
+
+  async toggleUserStatus(uid, disabled) {
+    try {
+      const headers = await this._getAuthHeaders();
+      const response = await fetch(`${API_BASE_URL}/firebase-users/${uid}/toggle-status`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ disabled }),
+      });
+
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => ({ error: 'Failed to parse error response.' }));
+        throw new Error(`Failed to toggle user status: ${response.statusText} - ${errorBody.error}`);
+      }
+
+      const message = disabled ? 'User disabled successfully!' : 'User enabled successfully!';
+      showToast('Success', message, 'success');
+    } catch (error) {
+      console.error('Error toggling user status:', error);
+      showToast('Error', `Could not toggle user status: ${error.message}`, 'danger');
+    }
+  }
+
+  async resetUserPassword(uid, newPassword) {
+    try {
+      const headers = await this._getAuthHeaders();
+      const response = await fetch(`${API_BASE_URL}/firebase-users/${uid}/reset-password`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ newPassword }),
+      });
+
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => ({ error: 'Failed to parse error response.' }));
+        throw new Error(`Failed to reset password: ${response.statusText} - ${errorBody.error}`);
+      }
+
+      showToast('Success', 'Password reset successfully!', 'success');
+    } catch (error) {
+      console.error('Error resetting password:', error);
+      showToast('Error', `Could not reset password: ${error.message}`, 'danger');
     }
   }
 }

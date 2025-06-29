@@ -137,6 +137,18 @@ const getLogsByDateRange = async (startDate, endDate, deviceId = null, limit = 1
   }
 };
 
+const getRecentLogs = async (limit = 10) => {
+  try {
+    const result = await db.query(
+      'SELECT * FROM logs ORDER BY timestamp DESC LIMIT $1',
+      [limit]
+    );
+    return result.rows;
+  } catch (error) {
+    throw error;
+  }
+};
+
 module.exports = {
   createLog,
   getLogsByDeviceId,
@@ -147,5 +159,6 @@ module.exports = {
   deleteLog,
   getLogCount,
   getLogCountByUserId,
-  getLogsByDateRange
+  getLogsByDateRange,
+  getRecentLogs
 };

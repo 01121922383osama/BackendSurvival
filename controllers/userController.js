@@ -4,8 +4,19 @@ const logger = require('../config/logger');
 
 const getAllUsers = async (req, res, next) => {
   try {
-    const users = await userService.getAllUsers();
-    res.status(200).json({ users });
+    // Get all users and device counts in parallel
+    const [users, deviceCounts] = await Promise.all([
+      userService.getAllUsers(),
+      deviceService.countDevicesPerUser()
+    ]);
+    
+    // Add device count to each user
+    const usersWithDeviceCounts = users.map(user => ({
+      ...user,
+      deviceCount: deviceCounts[user.id] || 0
+    }));
+    
+    res.status(200).json({ users: usersWithDeviceCounts });
   } catch (error) {
     logger.error('Error getting all users:', error);
     next(error);
@@ -15,11 +26,25 @@ const getAllUsers = async (req, res, next) => {
 const getUserById = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const user = await userService.getUserById(id);
+    
+    // Get user and their devices in parallel
+    const [user, devices] = await Promise.all([
+      userService.getUserById(id),
+      deviceService.getDevicesByUser(id)
+    ]);
+    
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
-    res.status(200).json({ user });
+    
+    // Add device count and devices to user object
+    const userWithDevices = {
+      ...user,
+      deviceCount: devices.length,
+      devices: devices
+    };
+    
+    res.status(200).json({ user: userWithDevices });
   } catch (error) {
     logger.error(`Error getting user with ID ${req.params.id}:`, error);
     next(error);

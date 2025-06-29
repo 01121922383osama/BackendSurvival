@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const deviceController = require('../controllers/deviceController');
 const { authenticateToken, requireAdmin, checkDeviceAccess } = require('../middleware/auth');
+const deviceModel = require('../models/device');
+const logger = require('../config/logger');
 
 // Public routes (no authentication required)
 // None for devices - all require authentication
@@ -24,5 +26,37 @@ router.delete('/:serialNumber', requireAdmin, deviceController.deleteDevice);
 router.post('/:serialNumber/assign', requireAdmin, deviceController.assignDeviceToUser);
 router.delete('/:serialNumber/assign', requireAdmin, deviceController.removeDeviceFromUser);
 router.get('/:serialNumber/users', requireAdmin, deviceController.getDeviceUsers);
+
+// Get dashboard statistics
+router.get('/stats', async (req, res) => {
+  try {
+    logger.debug('GET /devices/stats - Request received');
+    
+    // Get all devices
+    const devices = await deviceModel.getAllDevices();
+    
+    // Calculate statistics
+    const stats = {
+      totalDevices: devices.length,
+      onlineDevices: devices.filter(d => d.is_connected).length,
+      offlineDevices: devices.filter(d => !d.is_connected).length,
+      devicesWithAlerts: devices.filter(d => d.has_alert).length,
+      lastUpdated: new Date().toISOString()
+    };
+    
+    res.json({
+      success: true,
+      stats: stats,
+      devices: devices
+    });
+  } catch (error) {
+    logger.error('Error getting device statistics:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get device statistics',
+      error: error.message
+    });
+  }
+});
 
 module.exports = router; 
