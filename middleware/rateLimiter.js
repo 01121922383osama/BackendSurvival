@@ -1,9 +1,12 @@
 const rateLimit = require('express-rate-limit');
 
-// General API rate limiter
+// Check if we're in development mode
+const isDevelopment = process.env.NODE_ENV === 'development';
+
+// General API rate limiter with higher limits for development
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
+  max: isDevelopment ? 1000 : 100, // Higher limit in development
   standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
   legacyHeaders: false, // Disable the `X-RateLimit-*` headers
   message: {
@@ -11,10 +14,10 @@ const apiLimiter = rateLimit({
   }
 });
 
-// More strict rate limiter for auth endpoints
+// More permissive rate limiter for auth endpoints in development
 const authLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
-  max: 10, // limit each IP to 10 requests per windowMs
+  max: isDevelopment ? 100 : 10, // Higher limit in development
   standardHeaders: true,
   legacyHeaders: false,
   message: {
@@ -22,10 +25,10 @@ const authLimiter = rateLimit({
   }
 });
 
-// Special rate limiter for log creation to handle high volume
+// Special rate limiter for log creation with higher limits for development
 const logCreationLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
-  max: 100, // limit each IP to 100 log creations per minute (high volume support)
+  max: isDevelopment ? 1000 : 100, // Higher limit in development
   standardHeaders: true,
   legacyHeaders: false,
   message: {

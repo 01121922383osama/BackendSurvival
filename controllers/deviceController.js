@@ -32,6 +32,18 @@ const getAllDevices = async (req, res) => {
   }
 };
 
+// Get online devices (admin only)
+const getOnlineDevices = async (req, res) => {
+  try {
+    const devices = await deviceModel.getAllDevices();
+    const onlineDevices = devices.filter(device => device.is_connected === true);
+    res.status(200).json({ devices: onlineDevices });
+  } catch (error) {
+    logger.error('Error getting online devices:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 // Get devices for current user
 const getUserDevices = async (req, res) => {
   try {
@@ -226,6 +238,7 @@ const getDeviceUsers = async (req, res) => {
 module.exports = {
   createDevice,
   getAllDevices,
+  getOnlineDevices,
   getUserDevices,
   getDeviceBySerialNumber,
   updateDevice,

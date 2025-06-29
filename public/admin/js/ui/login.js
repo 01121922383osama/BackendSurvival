@@ -1,5 +1,3 @@
-import { signInWithEmailAndPassword } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js';
-import { auth } from '../firebase-config.js';
 import { showToast } from '../utils/toast.js';
 
 function renderLogin() {
@@ -53,12 +51,35 @@ function renderLogin() {
     submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Logging in...';
 
     try {
-      await signInWithEmailAndPassword(auth, email, password);
-      // onAuthStateChanged in app.js will handle the rest
+      const response = await fetch('/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Login failed');
+      }
+
+      const data = await response.json();
+      
+      // Store the JWT token
+      localStorage.setItem('token', data.token);
+      
+      // Store user info
+      localStorage.setItem('user', JSON.stringify(data.user));
+      
       showToast('Success', 'Logged in successfully!', 'success');
+      
+      // Redirect to dashboard
+      window.location.hash = '/dashboard';
+      
     } catch (error) {
       console.error('Login failed:', error);
-      showToast('Error', 'Login failed. Please check your credentials.', 'danger');
+      showToast('Error', error.message || 'Login failed. Please check your credentials.', 'danger');
       submitBtn.disabled = false;
       submitBtn.innerHTML = 'Login';
     }

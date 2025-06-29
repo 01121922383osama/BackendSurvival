@@ -21,44 +21,85 @@ async function loadTotalUsers() {
 async function loadDevices() {
   const token = getToken();
   if (!token) return;
-  const res = await fetch('/devices', {
-    headers: { 'Authorization': 'Bearer ' + token }
-  });
-  if (!res.ok) return;
-  const data = await res.json();
-  const devices = data.devices || data;
-  const deviceStatusCards = document.getElementById('device-status-cards');
-  if (!deviceStatusCards) return;
+  
+  try {
+    // Get all devices for the dashboard overview
+    const res = await fetch('/devices/all', {
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    const devices = data.devices || data;
+    const deviceStatusCards = document.getElementById('device-status-cards');
+    if (!deviceStatusCards) return;
 
-  deviceStatusCards.innerHTML = '';
-  let onlineCount = 0;
-  devices.forEach(device => {
-    // Debug log
-    console.log('Device:', device);
-    let status = (device.status || 'offline').toString().trim().toLowerCase();
-    let cardColor = 'bg-secondary';
-    if (status === 'online') {
-      cardColor = 'bg-success text-white';
-      onlineCount++;
-    } else if (status === 'offline') {
-      cardColor = 'bg-danger text-white';
-    } else if (status === 'alert') {
-      cardColor = 'bg-warning text-dark';
-    }
-    deviceStatusCards.innerHTML += `
-      <div class="col-md-4 mb-3">
-        <div class="card ${cardColor}">
-          <div class="card-body">
-            <h5 class="card-title">${device.serial_number || device.id}</h5>
-            <p class="card-text">Status: ${device.status || '-'}</p>
-            <p class="card-text">Owner: ${device.owner_id || '-'}</p>
+    deviceStatusCards.innerHTML = '';
+    let onlineCount = 0;
+    let alertCount = 0;
+    
+    devices.forEach(device => {
+      // Check if device is online based on is_connected field
+      const isOnline = device.is_connected === true;
+      const hasAlert = device.has_alert === true;
+      
+      if (isOnline) onlineCount++;
+      if (hasAlert) alertCount++;
+      
+      let cardColor = 'bg-secondary';
+      let statusText = 'Offline';
+      
+      if (isOnline && hasAlert) {
+        cardColor = 'bg-warning text-dark';
+        statusText = 'Alert';
+      } else if (isOnline) {
+        cardColor = 'bg-success text-white';
+        statusText = 'Online';
+      } else {
+        cardColor = 'bg-danger text-white';
+        statusText = 'Offline';
+      }
+      
+      const lastUpdated = device.last_updated ? new Date(device.last_updated).toLocaleString() : 'Unknown';
+      
+      deviceStatusCards.innerHTML += `
+        <div class="col-md-4 mb-3">
+          <div class="card ${cardColor}">
+            <div class="card-body">
+              <h5 class="card-title">
+                <i class="fas fa-microchip me-2"></i>
+                ${device.name || device.serial_number}
+              </h5>
+              <p class="card-text">
+                <strong>Status:</strong> ${statusText}
+              </p>
+              <p class="card-text">
+                <strong>Device ID:</strong> ${device.serial_number}
+              </p>
+              <p class="card-text">
+                <strong>Location:</strong> ${device.location || 'Unknown'}
+              </p>
+              <p class="card-text">
+                <strong>Last Updated:</strong> ${lastUpdated}
+              </p>
+              ${device.alert_message ? `
+              <div class="alert alert-warning alert-sm mb-0">
+                <i class="fas fa-exclamation-triangle me-1"></i>
+                ${device.alert_message}
+              </div>
+              ` : ''}
+            </div>
           </div>
         </div>
-      </div>
-    `;
-  });
-  document.getElementById('active-devices-count').textContent = devices.length;
-  document.getElementById('online-devices-count').textContent = onlineCount;
+      `;
+    });
+    
+    document.getElementById('active-devices-count').textContent = devices.length;
+    document.getElementById('online-devices-count').textContent = onlineCount;
+    document.getElementById('alerts-count').textContent = alertCount;
+    
+  } catch (error) {
+    console.error('Error loading devices:', error);
+  }
 }
 
 // Fetch and display logs as cards
@@ -99,7 +140,7 @@ async function loadLogs() {
   });
   logsHtml += '</div>';
   logsSection.innerHTML = logsHtml;
-  document.getElementById('alerts-count').textContent = logs.filter(l => (l.status || '').toString().trim().toLowerCase() === 'alert').length;
+  // Note: Alerts count is now handled in loadDevices function
 }
 
 // Main dashboard loader with polling for real-time updates

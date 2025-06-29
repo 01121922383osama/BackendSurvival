@@ -1,12 +1,9 @@
-import { onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js';
-import { auth } from './firebase-config.js';
 import Router from './router.js';
 import Navigation from './ui/navigation.js';
 import { showToast } from './utils/toast.js';
 
 class App {
   constructor() {
-    this.auth = auth;
     this.router = new Router(this);
     this.navigation = new Navigation(this.router);
     this.authReady = new Promise((resolve) => {
@@ -20,7 +17,7 @@ class App {
   }
 
   handleAuthentication() {
-    // Check for local JWT token instead of Firebase
+    // Check for local JWT token
     const token = localStorage.getItem('token');
     if (token) {
       this.onLogin();
@@ -42,6 +39,7 @@ class App {
           e.preventDefault();
           try {
             localStorage.removeItem('token');
+            localStorage.removeItem('user');
             this.onLogout();
             showToast('Success', 'You have been logged out.');
           } catch (error) {
@@ -64,6 +62,7 @@ class App {
     document.body.classList.remove('logged-in');
     document.body.classList.add('logged-out');
     localStorage.removeItem('token');
+    localStorage.removeItem('user');
     window.location.href = '/admin/login.html';
   }
 }

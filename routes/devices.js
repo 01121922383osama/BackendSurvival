@@ -13,6 +13,7 @@ router.use(authenticateToken);
 router.post('/', requireAdmin, deviceController.createDevice);
 router.get('/', deviceController.getUserDevices); // Users see their devices, admins see all
 router.get('/all', requireAdmin, deviceController.getAllDevices); // Admin only - all devices
+router.get('/online', requireAdmin, deviceController.getOnlineDevices); // Admin only - online devices
 
 // Device-specific routes
 router.get('/:serialNumber', checkDeviceAccess, deviceController.getDeviceBySerialNumber);
