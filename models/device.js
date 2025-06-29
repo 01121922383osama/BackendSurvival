@@ -45,7 +45,16 @@ const getDeviceBySerialNumber = async (serialNumber) => {
       'SELECT * FROM devices WHERE serial_number = $1',
       [serialNumber]
     );
-    return result.rows[0];
+    const device = result.rows[0];
+    if (device) {
+      let owners = device.owners;
+      if (typeof owners === 'string') {
+        try { owners = JSON.parse(owners); } catch { owners = []; }
+      }
+      if (!Array.isArray(owners)) owners = [];
+      device.owners = owners;
+    }
+    return device;
   } catch (error) {
     throw error;
   }
@@ -56,7 +65,16 @@ const getAllDevices = async () => {
     const result = await db.query(
       'SELECT * FROM devices ORDER BY created_at DESC'
     );
-    return result.rows;
+    // Ensure owners is always an array
+    return result.rows.map(device => {
+      let owners = device.owners;
+      if (typeof owners === 'string') {
+        try { owners = JSON.parse(owners); } catch { owners = []; }
+      }
+      if (!Array.isArray(owners)) owners = [];
+      device.owners = owners;
+      return device;
+    });
   } catch (error) {
     throw error;
   }

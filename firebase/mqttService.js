@@ -1,9 +1,10 @@
 const mqtt = require('mqtt');
 const logger = require('../config/logger');
 const admin = require('./firebaseInit');
-const { handleDeviceAlert } = require('./notificationService');
+const { notifyOwnersOnDeviceAlert } = require('./notificationService');
 const logModel = require('../models/log');
 const deviceModel = require('../models/device');
+const { getDeviceById } = require('./deviceService');
 
 const broker = process.env.MQTT_BROKER || 'mqtt://167.71.52.138';
 const options = {
@@ -66,9 +67,26 @@ client.on('message', async (topic, message) => {
       await saveLogToDatabase(deviceId, topic, payload);
 
     // Check for alert conditions and send notifications
+    logger.info(`=== MQTT ALERT CHECK ===`);
+    logger.info(`Payload params: ${JSON.stringify(payload.params)}`);
+    logger.info(`Fall status in payload: ${payload.params?.fallStatus}`);
+    logger.info(`Resident status in payload: ${payload.params?.residentStatus}`);
+    logger.info(`Alert condition check: ${payload.params?.fallStatus === '1' || payload.params?.residentStatus === '1'}`);
+    
     if (payload.params?.fallStatus === '1' || payload.params?.residentStatus === '1') {
-      await handleDeviceAlert(deviceId, payload.params);
+      logger.info(`Alert condition detected! Fetching device for notification from Firestore...`);
+      // Fetch the device object for notification from Firestore
+      const device = await getDeviceById(deviceId);
+      if (device) {
+        logger.info(`Device found in Firestore, calling notification service...`);
+        await notifyOwnersOnDeviceAlert(device, payload.params);
+      } else {
+        logger.warn(`Device ${deviceId} not found in Firestore. Cannot send notifications.`);
+      }
+    } else {
+      logger.info(`No alert condition detected. Skipping notification.`);
     }
+    logger.info(`=== MQTT ALERT CHECK END ===`);
 
   } catch (error) {
     logger.error('Error processing MQTT message:', error);

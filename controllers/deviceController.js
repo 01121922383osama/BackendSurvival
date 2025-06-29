@@ -1,13 +1,14 @@
 const deviceModel = require('../models/device');
 const userModel = require('../models/user');
 const logger = require('../config/logger');
+const notificationService = require('../firebase/notificationService');
 
 // Create a new device
 const createDevice = async (req, res) => {
   try {
     const deviceData = req.body;
     const device = await deviceModel.createDevice(deviceData);
-    
+
     res.status(201).json({
       message: 'Device created successfully',
       device
@@ -61,7 +62,7 @@ const getDeviceBySerialNumber = async (req, res) => {
   try {
     const { serialNumber } = req.params;
     const device = await deviceModel.getDeviceBySerialNumber(serialNumber);
-    
+
     if (!device) {
       return res.status(404).json({ error: 'Device not found' });
     }
@@ -69,11 +70,11 @@ const getDeviceBySerialNumber = async (req, res) => {
     // Check if user has access to this device
     const userId = req.user.userId;
     const userRole = req.user.role;
-    
+
     if (userRole !== 'admin') {
       const userDevices = await deviceModel.getDevicesByUserId(userId);
       const hasAccess = userDevices.some(d => d.serial_number === serialNumber);
-      
+
       if (!hasAccess) {
         return res.status(403).json({ error: 'Access denied' });
       }
@@ -101,21 +102,24 @@ const updateDevice = async (req, res) => {
     // Check if user has access to this device
     const userId = req.user.userId;
     const userRole = req.user.role;
-    
+
     if (userRole !== 'admin') {
       const userDevices = await deviceModel.getDevicesByUserId(userId);
       const hasAccess = userDevices.some(d => d.serial_number === serialNumber);
-      
+
       if (!hasAccess) {
         return res.status(403).json({ error: 'Access denied' });
       }
     }
 
     const updatedDevice = await deviceModel.updateDevice(serialNumber, updateData);
-    
+
     if (!updatedDevice) {
       return res.status(404).json({ error: 'Device not found' });
     }
+
+    // Notify owners if needed
+    await notificationService.notifyOwnersOnDeviceAlert(updatedDevice, updateData);
 
     res.status(200).json({
       message: 'Device updated successfully',
@@ -131,14 +135,14 @@ const updateDevice = async (req, res) => {
 const deleteDevice = async (req, res) => {
   try {
     const { serialNumber } = req.params;
-    
+
     // Only admins can delete devices
     if (req.user.role !== 'admin') {
       return res.status(403).json({ error: 'Access denied. Admin role required.' });
     }
 
     const deleted = await deviceModel.deleteDevice(serialNumber);
-    
+
     if (!deleted) {
       return res.status(404).json({ error: 'Device not found' });
     }
@@ -154,7 +158,7 @@ const deleteDevice = async (req, res) => {
 const assignDeviceToUser = async (req, res) => {
   try {
     const { serialNumber, userId } = req.body;
-    
+
     // Only admins can assign devices
     if (req.user.role !== 'admin') {
       return res.status(403).json({ error: 'Access denied. Admin role required.' });
@@ -173,7 +177,7 @@ const assignDeviceToUser = async (req, res) => {
     }
 
     await deviceModel.assignDeviceToUser(userId, device.id);
-    
+
     res.status(200).json({ message: 'Device assigned to user successfully' });
   } catch (error) {
     logger.error('Error assigning device to user:', error);
@@ -185,7 +189,7 @@ const assignDeviceToUser = async (req, res) => {
 const removeDeviceFromUser = async (req, res) => {
   try {
     const { serialNumber, userId } = req.body;
-    
+
     // Only admins can remove device assignments
     if (req.user.role !== 'admin') {
       return res.status(403).json({ error: 'Access denied. Admin role required.' });
@@ -198,7 +202,7 @@ const removeDeviceFromUser = async (req, res) => {
     }
 
     const removed = await deviceModel.removeDeviceFromUser(userId, device.id);
-    
+
     if (!removed) {
       return res.status(404).json({ error: 'Device assignment not found' });
     }
@@ -214,7 +218,7 @@ const removeDeviceFromUser = async (req, res) => {
 const getDeviceUsers = async (req, res) => {
   try {
     const { serialNumber } = req.params;
-    
+
     // Only admins can see device users
     if (req.user.role !== 'admin') {
       return res.status(403).json({ error: 'Access denied. Admin role required.' });
@@ -227,7 +231,7 @@ const getDeviceUsers = async (req, res) => {
     }
 
     const users = await deviceModel.getDeviceUsers(device.id);
-    
+
     res.status(200).json({ users });
   } catch (error) {
     logger.error('Error getting device users:', error);
