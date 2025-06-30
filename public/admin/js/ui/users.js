@@ -92,23 +92,23 @@ async function loadUsersData() {
 
 function createUserRow(user) {
   const row = document.createElement('tr');
-  
+
   const createdAt = user.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'N/A';
   const updatedAt = user.firestoreUpdatedAt ? new Date(user.firestoreUpdatedAt).toLocaleDateString() : 'N/A';
-  
+
   // Truncate device token for display
   const deviceToken = user.deviceToken || 'N/A';
   const truncatedToken = deviceToken.length > 30 ? deviceToken.substring(0, 30) + '...' : deviceToken;
-  
+
   // Avatar display
-  const avatarDisplay = user.imageUrl ? 
-    `<img src="${user.imageUrl}" alt="Avatar" class="rounded-circle" width="32" height="32">` : 
+  const avatarDisplay = user.imageUrl ?
+    `<img src="${user.imageUrl}" alt="Avatar" class="rounded-circle" width="32" height="32">` :
     '<i class="fas fa-user-circle fa-2x text-muted"></i>';
 
   // Device count display
   const deviceCount = user.deviceCount || 0;
-  const deviceCountDisplay = deviceCount > 0 ? 
-    `<span class="badge bg-primary">${deviceCount}</span>` : 
+  const deviceCountDisplay = deviceCount > 0 ?
+    `<span class="badge bg-primary">${deviceCount}</span>` :
     '<span class="badge bg-secondary">0</span>';
 
   row.innerHTML = `
@@ -151,7 +151,7 @@ function createUserRow(user) {
 }
 
 // Global functions for user actions
-window.viewUser = async function(uid) {
+window.viewUser = async function (uid) {
   try {
     const user = await userService.getUser(uid);
     if (user) {
@@ -162,7 +162,7 @@ window.viewUser = async function(uid) {
   }
 };
 
-window.editUser = async function(uid) {
+window.editUser = async function (uid) {
   try {
     const user = await userService.getUser(uid);
     if (user) {
@@ -173,7 +173,7 @@ window.editUser = async function(uid) {
   }
 };
 
-window.viewUserDevices = async function(uid) {
+window.viewUserDevices = async function (uid) {
   try {
     const user = await userService.getUser(uid);
     if (user) {
@@ -184,7 +184,7 @@ window.viewUserDevices = async function(uid) {
   }
 };
 
-window.viewDeviceToken = async function(uid) {
+window.viewDeviceToken = async function (uid) {
   try {
     const user = await userService.getUser(uid);
     if (user && user.deviceToken) {
@@ -197,7 +197,7 @@ window.viewDeviceToken = async function(uid) {
   }
 };
 
-window.copyToClipboard = function(text) {
+window.copyToClipboard = function (text) {
   if (text && text !== 'N/A') {
     navigator.clipboard.writeText(text).then(() => {
       showToast('Success', 'Device token copied to clipboard', 'success');
@@ -207,7 +207,7 @@ window.copyToClipboard = function(text) {
   }
 };
 
-window.deleteUser = async function(uid, email) {
+window.deleteUser = async function (uid, email) {
   if (confirm(`Are you sure you want to delete user "${email}"? This action cannot be undone.`)) {
     try {
       await userService.deleteUser(uid);
@@ -242,7 +242,7 @@ function showAddUserModal() {
   `, async () => {
     // Prevent any default form submission
     event?.preventDefault();
-    
+
     const emailInput = document.getElementById('user-email');
     const passwordInput = document.getElementById('user-password');
     const nameInput = document.getElementById('user-name');
@@ -259,12 +259,12 @@ function showAddUserModal() {
     const imageUrl = imageUrlInput ? imageUrlInput.value.trim() : '';
 
     // Debug logging
-    console.log('Form values:', { 
-      email: `"${email}"`, 
+    console.log('Form values:', {
+      email: `"${email}"`,
       emailLength: email.length,
-      password: password ? '***' : 'empty', 
+      password: password ? '***' : 'empty',
       passwordLength: password.length,
-      name: `"${name}"`, 
+      name: `"${name}"`,
       imageUrl: `"${imageUrl}"`
     });
 
@@ -304,7 +304,7 @@ function showAddUserModal() {
       };
 
       console.log('Creating user with data:', { ...userData, password: '***' });
-      
+
       await userService.createUser(userData);
       await loadUsersData(); // Refresh the table
       showToast('Success', 'User created successfully!', 'success');
@@ -473,7 +473,7 @@ function createModal(title, content, onSave, saveText = 'Save') {
   });
 
   document.body.appendChild(modal);
-  
+
   if (window.bootstrap && window.bootstrap.Modal) {
     const bootstrapModal = new window.bootstrap.Modal(modal);
     bootstrapModal.show();
@@ -481,7 +481,7 @@ function createModal(title, content, onSave, saveText = 'Save') {
     modal.classList.add('show');
     modal.style.display = 'block';
     document.body.classList.add('modal-open');
-    
+
     const backdrop = document.createElement('div');
     backdrop.className = 'modal-backdrop fade show';
     document.body.appendChild(backdrop);

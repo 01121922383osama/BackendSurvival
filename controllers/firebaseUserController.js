@@ -36,6 +36,16 @@ const getAllFirebaseUsers = async (req, res) => {
         const users = authUsers.map(authUser => {
             const firestoreData = firestoreUsers[authUser.uid] || {};
             const deviceCount = userDeviceCounts[authUser.uid] || 0;
+
+            // Safely convert Firestore Timestamps to ISO strings
+            function safeToISOString(val) {
+                if (!val) return null;
+                if (typeof val === 'string') return val;
+                if (val.toDate) return val.toDate().toISOString();
+                if (val instanceof Date) return val.toISOString();
+                return null;
+            }
+
             return {
                 uid: authUser.uid,
                 email: authUser.email,
@@ -53,8 +63,8 @@ const getAllFirebaseUsers = async (req, res) => {
                 isAdmin: firestoreData.isAdmin || false,
                 deviceToken: firestoreData.deviceToken,
                 imageUrl: firestoreData.imageUrl,
-                firestoreCreatedAt: firestoreData.createdAt,
-                firestoreUpdatedAt: firestoreData.updatedAt,
+                firestoreCreatedAt: safeToISOString(firestoreData.createdAt),
+                firestoreUpdatedAt: safeToISOString(firestoreData.updatedAt),
                 // Device count
                 deviceCount: deviceCount
             };
@@ -85,6 +95,15 @@ const getFirebaseUser = async (req, res) => {
         const devicesSnapshot = await db.collection('devices').where('owners', 'array-contains', uid).get();
         const deviceCount = devicesSnapshot.size;
 
+        // Safely convert Firestore Timestamps to ISO strings
+        function safeToISOString(val) {
+            if (!val) return null;
+            if (typeof val === 'string') return val;
+            if (val.toDate) return val.toDate().toISOString();
+            if (val instanceof Date) return val.toISOString();
+            return null;
+        }
+
         const user = {
             uid: authUser.uid,
             email: authUser.email,
@@ -102,8 +121,8 @@ const getFirebaseUser = async (req, res) => {
             isAdmin: firestoreData.isAdmin || false,
             deviceToken: firestoreData.deviceToken,
             imageUrl: firestoreData.imageUrl,
-            firestoreCreatedAt: firestoreData.createdAt,
-            firestoreUpdatedAt: firestoreData.updatedAt,
+            firestoreCreatedAt: safeToISOString(firestoreData.createdAt),
+            firestoreUpdatedAt: safeToISOString(firestoreData.updatedAt),
             // Device count
             deviceCount: deviceCount
         };

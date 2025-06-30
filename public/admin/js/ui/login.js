@@ -1,4 +1,5 @@
 import { showToast } from '../utils/toast.js';
+import { auth, signInWithEmailAndPassword, onAuthStateChanged } from '../firebase-config.js';
 
 function renderLogin() {
   const mainContent = document.querySelector('main');
@@ -51,37 +52,33 @@ function renderLogin() {
     submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Logging in...';
 
     try {
-      const response = await fetch('/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email, password }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Login failed');
-      }
-
-      const data = await response.json();
-      
-      // Store the JWT token
-      localStorage.setItem('token', data.token);
-      
-      // Store user info
-      localStorage.setItem('user', JSON.stringify(data.user));
-      
+      // Use Firebase Auth for login
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+      if (!user) throw new Error('Login failed: No user');
+      // Get the latest ID token
+      const token = await user.getIdToken(true);
+      localStorage.setItem('token', token);
+      localStorage.setItem('user', JSON.stringify({ email: user.email, uid: user.uid }));
       showToast('Success', 'Logged in successfully!', 'success');
-      
-      // Redirect to dashboard
       window.location.hash = '/dashboard';
-      
     } catch (error) {
       console.error('Login failed:', error);
       showToast('Error', error.message || 'Login failed. Please check your credentials.', 'danger');
       submitBtn.disabled = false;
       submitBtn.innerHTML = 'Login';
+    }
+  });
+
+  // Listen for token refresh and keep it updated in localStorage
+  onAuthStateChanged(auth, async (user) => {
+    if (user) {
+      const token = await user.getIdToken();
+      localStorage.setItem('token', token);
+      localStorage.setItem('user', JSON.stringify({ email: user.email, uid: user.uid }));
+    } else {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
     }
   });
 }

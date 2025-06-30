@@ -313,6 +313,8 @@ function showDeviceDetailsModal(device) {
   modal.show();
 }
 
+window.showDeviceDetailsModal = showDeviceDetailsModal;
+
 // Update the global function to show details modal
 window.viewDeviceDetails = function (serialNumber) {
   const device = devicesData.find(d => d.serial_number === serialNumber);

@@ -172,33 +172,59 @@ function createLogCard(log) {
   // Use params (payload) for color logic
   const paramsObj = log.params || {};
   const color = getColorForParams(paramsObj); // 'success', 'danger', etc.
-  const cardColor = `border-${color}`;
-  const statusClass = `bg-${color}`;
+  const colorMap = {
+    danger: '#dc3545', // red
+    warning: '#ffc107', // yellow
+    success: '#198754', // green
+    primary: '#0d6efd', // blue
+    secondary: '#6c757d', // grey
+  };
+  const statusBadge =
+    color === 'danger'
+      ? '<span class="badge bg-danger"><i class="fas fa-exclamation-triangle me-1"></i>Alert</span>'
+      : color === 'warning'
+        ? '<span class="badge bg-warning text-dark">Warning</span>'
+        : color === 'success'
+          ? '<span class="badge bg-success">Online</span>'
+          : color === 'primary'
+            ? '<span class="badge bg-primary">Info</span>'
+            : '<span class="badge bg-secondary">Unknown</span>';
+  const statusCircle = `<span style="display:inline-block;width:16px;height:16px;border-radius:50%;background:${colorMap[color] || colorMap.secondary};margin-right:8px;vertical-align:middle;"></span>`;
   const timestamp = log.timestamp ? new Date(log.timestamp).toLocaleString() : '';
   const params = Object.keys(paramsObj).length ? JSON.stringify(paramsObj, null, 2) : '{}';
 
   const col = document.createElement('div');
-  col.className = 'col-md-6 col-lg-4 mb-4';
+  col.className = 'col-xl-4 col-lg-6 col-md-12 mb-4';
 
   col.innerHTML = `
-    <div class="card h-100 shadow-sm ${cardColor}">
-      <div class="card-header d-flex justify-content-between align-items-center">
-        <span class="badge ${statusClass}">${color.toUpperCase()}</span>
-        <span class="text-muted small">${timestamp}</span>
-      </div>
+    <div class="card shadow-sm border-0 h-100 bg-white" style="border-radius: 1rem; transition: box-shadow 0.2s;">
       <div class="card-body">
-        <div class="mb-2"><strong>Device ID:</strong> <code>${log.device_id || '-'}</code></div>
-        <div class="mb-2"><strong>Parameters:</strong>
-          <pre class="mb-0" style="white-space:pre-wrap; font-size:0.9em;">${params}</pre>
+        <div class="d-flex align-items-center mb-3">
+          <div class="me-3">
+            <i class="fas fa-microchip fa-2x text-primary"></i>
+          </div>
+          <div class="flex-grow-1">
+            <h5 class="card-title mb-0 fw-bold">Device: ${log.device_id || '-'}</h5>
+            <div class="d-flex align-items-center mt-1">
+              ${statusCircle}
+              ${statusBadge}
+            </div>
+          </div>
         </div>
-      </div>
-      <div class="card-footer d-flex justify-content-end gap-2">
-        <button class="btn btn-sm btn-outline-info" onclick="viewLogDetails('${log.id}')" title="View Details" data-bs-toggle="tooltip" data-bs-placement="top">
-          <i class="fas fa-eye"></i>
-        </button>
-        <button class="btn btn-sm btn-outline-secondary" onclick="viewLogParams('${log.id}')" title="View Parameters" data-bs-toggle="tooltip" data-bs-placement="top">
-          <i class="fas fa-code"></i>
-        </button>
+        <ul class="list-unstyled mb-3">
+          <li><strong>Time:</strong> ${timestamp}</li>
+        </ul>
+        <div class="mb-2"><strong>Parameters:</strong>
+          <pre class="mb-0 bg-light p-2 rounded" style="white-space:pre-wrap; font-size:0.9em;">${params}</pre>
+        </div>
+        <div class="d-flex justify-content-end gap-2 mt-3">
+          <button class="btn btn-sm btn-outline-info" onclick="viewLogDetails('${log.id}')" title="View Details" data-bs-toggle="tooltip" data-bs-placement="top">
+            <i class="fas fa-eye"></i>
+          </button>
+          <button class="btn btn-sm btn-outline-secondary" onclick="viewLogParams('${log.id}')" title="View Parameters" data-bs-toggle="tooltip" data-bs-placement="top">
+            <i class="fas fa-code"></i>
+          </button>
+        </div>
       </div>
     </div>
   `;
@@ -217,19 +243,19 @@ function createLogCard(log) {
 function handleDeviceFilter(event) {
   event.preventDefault();
   const deviceId = event.target.getAttribute('data-device-id');
-  
+
   // Update active filter
   const dropdownButton = document.getElementById('device-filter-dropdown');
   if (dropdownButton) {
     dropdownButton.textContent = event.target.textContent;
   }
-  
+
   // Update active class
   document.querySelectorAll('#device-filter-menu .dropdown-item').forEach(item => {
     item.classList.remove('active');
   });
   event.target.classList.add('active');
-  
+
   // Load logs for selected device
   loadLogsData(deviceId);
 }
@@ -275,12 +301,12 @@ async function loadDeviceFilter() {
 }
 
 // Global functions for log actions
-window.viewLogDetails = function(logId) {
+window.viewLogDetails = function (logId) {
   showToast('Info', `Viewing details for log: ${logId}`, 'info');
   // TODO: Implement log details modal
 };
 
-window.viewLogParams = function(logId) {
+window.viewLogParams = function (logId) {
   showToast('Info', `Viewing parameters for log: ${logId}`, 'info');
   // TODO: Implement log parameters modal
 };
