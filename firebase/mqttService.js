@@ -33,32 +33,32 @@ const initializeMQTT = () => {
   logger.info('Initializing MQTT connection...');
   client = mqtt.connect(broker, options);
 
-client.on('connect', () => {
+  client.on('connect', () => {
     logger.info('✅ Connected to MQTT broker');
     isConnected = true;
     reconnectAttempts = 0;
-    
+
     // Subscribe to all device topics
-  client.subscribe('/Radar60FL/#', (err) => {
-    if (err) {
-      logger.error('MQTT subscription error:', err);
-    } else {
-      logger.info('Subscribed to /Radar60FL/#');
-    }
+    client.subscribe('/Radar60FL/#', (err) => {
+      if (err) {
+        logger.error('MQTT subscription error:', err);
+      } else {
+        logger.info('Subscribed to /Radar60FL/#');
+      }
+    });
   });
-});
 
-client.on('message', async (topic, message) => {
-  try {
-    const payload = JSON.parse(message.toString());
-    // logger.debug(`MQTT message received on topic ${topic}:`, payload);
+  client.on('message', async (topic, message) => {
+    try {
+      const payload = JSON.parse(message.toString());
+      // logger.debug(`MQTT message received on topic ${topic}:`, payload);
 
-    const topicParts = topic.split('/');
-    if (topicParts.length < 3) {
-      logger.warn(`Invalid topic format: ${topic}`);
-      return;
-    }
-    const deviceId = topicParts[2];
+      const topicParts = topic.split('/');
+      if (topicParts.length < 3) {
+        logger.warn(`Invalid topic format: ${topic}`);
+        return;
+      }
+      const deviceId = topicParts[2];
 
       // Process device status and update device record
       await processDeviceMessage(deviceId, topic, payload);
@@ -66,40 +66,40 @@ client.on('message', async (topic, message) => {
       // Save log to database
       await saveLogToDatabase(deviceId, topic, payload);
 
-    // Check for alert conditions and send notifications
-    logger.info(`=== MQTT ALERT CHECK ===`);
-    logger.info(`Payload params: ${JSON.stringify(payload.params)}`);
-    logger.info(`Fall status in payload: ${payload.params?.fallStatus}`);
-    logger.info(`Resident status in payload: ${payload.params?.residentStatus}`);
-    logger.info(`Alert condition check: ${payload.params?.fallStatus === '1' || payload.params?.residentStatus === '1'}`);
-    
-    if (payload.params?.fallStatus === '1' || payload.params?.residentStatus === '1') {
-      logger.info(`Alert condition detected! Fetching device for notification from Firestore...`);
-      // Fetch the device object for notification from Firestore
-      const device = await getDeviceById(deviceId);
-      if (device) {
-        logger.info(`Device found in Firestore, calling notification service...`);
-        await notifyOwnersOnDeviceAlert(device, payload.params);
+      // Check for alert conditions and send notifications
+      logger.info(`=== MQTT ALERT CHECK ===`);
+      logger.info(`Payload params: ${JSON.stringify(payload.params)}`);
+      logger.info(`Fall status in payload: ${payload.params?.fallStatus}`);
+      logger.info(`Resident status in payload: ${payload.params?.residentStatus}`);
+      logger.info(`Alert condition check: ${payload.params?.fallStatus === '1' || payload.params?.residentStatus === '1'}`);
+
+      if (payload.params?.fallStatus === '1' || payload.params?.residentStatus === '1') {
+        logger.info(`Alert condition detected! Fetching device for notification from Firestore...`);
+        // Fetch the device object for notification from Firestore
+        const device = await getDeviceById(deviceId);
+        if (device) {
+          logger.info(`Device found in Firestore, calling notification service...`);
+          await notifyOwnersOnDeviceAlert(device, payload.params);
+        } else {
+          logger.warn(`Device ${deviceId} not found in Firestore. Cannot send notifications.`);
+        }
       } else {
-        logger.warn(`Device ${deviceId} not found in Firestore. Cannot send notifications.`);
+        logger.info(`No alert condition detected. Skipping notification.`);
       }
-    } else {
-      logger.info(`No alert condition detected. Skipping notification.`);
+      logger.info(`=== MQTT ALERT CHECK END ===`);
+
+    } catch (error) {
+      logger.error('Error processing MQTT message:', error);
     }
-    logger.info(`=== MQTT ALERT CHECK END ===`);
+  });
 
-  } catch (error) {
-    logger.error('Error processing MQTT message:', error);
-  }
-});
-
-client.on('error', (error) => {
-  logger.error('MQTT client error:', error);
+  client.on('error', (error) => {
+    logger.error('MQTT client error:', error);
     isConnected = false;
-});
+  });
 
-client.on('close', () => {
-  logger.warn('MQTT client disconnected');
+  client.on('close', () => {
+    logger.warn('MQTT client disconnected');
     isConnected = false;
     handleReconnect();
   });
@@ -118,10 +118,10 @@ client.on('close', () => {
 const processDeviceMessage = async (deviceId, topic, payload) => {
   try {
     const params = payload.params || {};
-    
+
     // Check if device exists in database
     let device = await deviceModel.getDeviceBySerialNumber(deviceId);
-    
+
     if (!device) {
       // Create new device if it doesn't exist
       logger.info(`Creating new device: ${deviceId}`);
@@ -143,13 +143,13 @@ const processDeviceMessage = async (deviceId, topic, payload) => {
       isConnected: true,
       lastUpdated: new Date(),
       hasAlert: params.fallStatus === '1' || params.residentStatus === '1',
-      alertMessage: params.fallStatus === '1' ? 'Fall detected' : 
-                   params.residentStatus === '1' ? 'Resident alert' : null,
+      alertMessage: params.fallStatus === '1' ? 'Fall detected' :
+        params.residentStatus === '1' ? 'Resident alert' : null,
       isFall: params.fallStatus === '1'
     };
 
     await deviceModel.updateDevice(deviceId, updateData);
-    
+
     // logger.debug(`Updated device ${deviceId} status:`, updateData);
 
     // Broadcast real-time update to connected WebSocket clients
@@ -165,7 +165,7 @@ const processDeviceMessage = async (deviceId, topic, payload) => {
         },
         timestamp: new Date().toISOString()
       };
-      
+
       global.broadcastToClients(realTimeUpdate);
       // logger.debug(`Broadcasted device update for ${deviceId}`);
     }
@@ -179,7 +179,7 @@ const saveLogToDatabase = async (deviceId, topic, payload) => {
   try {
     const params = payload.params || {};
     const statusColor = getColorForParams(params);
-    
+
     await logModel.createLog(
       deviceId,
       new Date(),
@@ -187,7 +187,7 @@ const saveLogToDatabase = async (deviceId, topic, payload) => {
       topic,
       statusColor
     );
-    
+
     // logger.debug(`Saved log to database for device ${deviceId}`);
   } catch (error) {
     logger.error(`Error saving log to database for device ${deviceId}:`, error);
@@ -203,9 +203,9 @@ const handleReconnect = () => {
 
   reconnectAttempts++;
   const delay = Math.pow(2, reconnectAttempts) * 1000; // Exponential backoff
-  
+
   logger.info(`Attempting to reconnect in ${delay}ms (attempt ${reconnectAttempts}/${maxReconnectAttempts})`);
-  
+
   setTimeout(() => {
     if (!isConnected) {
       logger.info('Attempting to reconnect to MQTT broker...');

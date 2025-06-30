@@ -1,7 +1,7 @@
 import { loadDashboard } from './ui/dashboard.js';
 import { loadDevices } from './ui/devices.js';
 import { loadLogin } from './ui/login.js';
-import { loadLogs } from './ui/logs.js';
+import { loadLogs, loadLogsData } from './ui/logs.js';
 import { loadUsers } from './ui/users.js';
 import { showToast } from './utils/toast.js';
 
@@ -23,6 +23,17 @@ class Router {
   loadRoute() {
     const hash = window.location.hash.substring(1) || '/';
     const path = hash.startsWith('/') ? hash : `/${hash}`;
+
+    // Custom route for logs-device/:deviceId
+    const logsDeviceMatch = path.match(/^\/logs-device-(.+)$/);
+    if (logsDeviceMatch) {
+      const deviceId = logsDeviceMatch[1];
+      this.setActiveSection('/logs');
+      // Ensure logs UI is rendered, then load logs for the device
+      loadLogs();
+      setTimeout(() => loadLogsData(deviceId), 0);
+      return;
+    }
 
     const routeHandler = this.routes[path];
 

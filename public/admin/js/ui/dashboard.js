@@ -27,10 +27,10 @@ async function loadTotalUsers() {
   try {
     // Get Firebase users instead of local database users
     const res = await fetch('/firebase-users', {
-      headers: { 'Authorization': 'Bearer ' + token }
-    });
-    if (!res.ok) return;
-    const data = await res.json();
+    headers: { 'Authorization': 'Bearer ' + token }
+  });
+  if (!res.ok) return;
+  const data = await res.json();
     dashboardData.users = data.users || [];
     dashboardData.stats.totalUsers = dashboardData.users.length;
     document.getElementById('total-users-count').textContent = dashboardData.stats.totalUsers;
@@ -43,93 +43,91 @@ async function loadTotalUsers() {
 async function loadDevices() {
   const token = getToken();
   if (!token) return;
-  
+  const loadingIndicator = document.getElementById('dashboard-devices-loading');
+  const emptyIndicator = document.getElementById('dashboard-devices-empty');
+  const deviceStatusCards = document.getElementById('device-status-cards');
+  if (loadingIndicator) loadingIndicator.classList.remove('d-none');
+  if (emptyIndicator) emptyIndicator.classList.add('d-none');
+  if (deviceStatusCards) deviceStatusCards.innerHTML = '';
   try {
     // Get all devices for the dashboard overview
     const res = await fetch('/devices/all', {
       headers: { 'Authorization': 'Bearer ' + token }
     });
-    if (!res.ok) return;
+    if (!res.ok) throw new Error('Failed to fetch devices');
     const data = await res.json();
     dashboardData.devices = data.devices || data;
     updateDeviceDisplay();
-    
   } catch (error) {
     console.error('Error loading devices:', error);
+    if (emptyIndicator) emptyIndicator.classList.remove('d-none');
+  } finally {
+    if (loadingIndicator) loadingIndicator.classList.add('d-none');
   }
 }
 
-// Update device display with current data
+// Update device display with current data (modern UI)
 function updateDeviceDisplay() {
   const devices = dashboardData.devices;
   const deviceStatusCards = document.getElementById('device-status-cards');
+  const emptyIndicator = document.getElementById('dashboard-devices-empty');
   if (!deviceStatusCards) return;
 
   deviceStatusCards.innerHTML = '';
   let onlineCount = 0;
   let alertCount = 0;
-  
+
+  if (!devices || devices.length === 0) {
+    if (emptyIndicator) emptyIndicator.classList.remove('d-none');
+    return;
+  } else {
+    if (emptyIndicator) emptyIndicator.classList.add('d-none');
+  }
+
   devices.forEach(device => {
     // Check if device is online based on is_connected field
     const isOnline = device.is_connected === true;
     const hasAlert = device.has_alert === true;
-    
     if (isOnline) onlineCount++;
     if (hasAlert) alertCount++;
-    
-    let cardColor = 'bg-secondary';
-    let statusText = 'Offline';
-    
-    if (isOnline && hasAlert) {
-      cardColor = 'bg-warning text-dark';
-      statusText = 'Alert';
-    } else if (isOnline) {
-      cardColor = 'bg-success text-white';
-      statusText = 'Online';
-    } else {
-      cardColor = 'bg-danger text-white';
-      statusText = 'Offline';
-    }
-    
-    const lastUpdated = device.last_updated ? new Date(device.last_updated).toLocaleString() : 'Unknown';
-    
+
+    let statusBadge = isOnline
+      ? (hasAlert ? '<span class="badge bg-warning text-dark ms-2">Alert</span>' : '<span class="badge bg-success ms-2">Online</span>')
+      : '<span class="badge bg-danger ms-2">Offline</span>';
+    let cardBorder = isOnline
+      ? (hasAlert ? 'border-warning' : 'border-success')
+      : 'border-danger';
+    let cardShadow = 'shadow-sm';
+    let lastUpdated = device.last_updated ? new Date(device.last_updated).toLocaleString() : 'Unknown';
+
     deviceStatusCards.innerHTML += `
-      <div class="col-md-4 mb-3">
-        <div class="card ${cardColor}">
+      <div class="col-xl-4 col-lg-6 col-md-12 mb-4">
+        <div class="card ${cardBorder} ${cardShadow} h-100 device-card" style="transition: box-shadow 0.2s;">
           <div class="card-body">
-            <h5 class="card-title">
-              <i class="fas fa-microchip me-2"></i>
-              ${device.name || device.serial_number}
-            </h5>
-            <p class="card-text">
-              <strong>Status:</strong> ${statusText}
-            </p>
-            <p class="card-text">
-              <strong>Device ID:</strong> ${device.serial_number}
-            </p>
-            <p class="card-text">
-              <strong>Location:</strong> ${device.location || 'Unknown'}
-            </p>
-            <p class="card-text">
-              <strong>Last Updated:</strong> ${lastUpdated}
-            </p>
-            ${device.alert_message ? `
-            <div class="alert alert-warning alert-sm mb-0">
-              <i class="fas fa-exclamation-triangle me-1"></i>
-              ${device.alert_message}
+            <div class="d-flex align-items-center mb-2">
+              <i class="fas fa-microchip fa-2x text-primary me-3"></i>
+              <h5 class="card-title mb-0 flex-grow-1 fw-bold">${device.name || device.serial_number}</h5>
+              ${statusBadge}
             </div>
-            ` : ''}
+            <div class="mb-2"><strong>Device ID:</strong> ${device.serial_number}</div>
+            <div class="mb-2"><strong>Location:</strong> ${device.location || 'Unknown'}</div>
+            <div class="mb-2"><strong>Last Updated:</strong> ${lastUpdated}</div>
+            ${device.alert_message ? `<div class='alert alert-warning d-flex align-items-center mt-2 mb-0'><i class='fas fa-exclamation-triangle me-2'></i> ${device.alert_message}</div>` : ''}
+            <div class="d-flex justify-content-end gap-2 mt-3">
+              <button class="btn btn-outline-primary btn-sm" onclick="viewDeviceDetails('${device.serial_number}')"><i class="fas fa-eye me-1"></i> Details</button>
+              <button class="btn btn-outline-secondary btn-sm" onclick="viewDeviceLogs('${device.serial_number}')"><i class="fas fa-list me-1"></i> Logs</button>
+            </div>
           </div>
         </div>
       </div>
     `;
   });
-  
+
   // Update dashboard stats
   dashboardData.stats.totalDevices = devices.length;
   dashboardData.stats.onlineDevices = onlineCount;
   dashboardData.stats.alertsCount = alertCount;
-  
+
   document.getElementById('active-devices-count').textContent = dashboardData.stats.totalDevices;
   document.getElementById('online-devices-count').textContent = dashboardData.stats.onlineDevices;
   document.getElementById('alerts-count').textContent = dashboardData.stats.alertsCount;
@@ -273,17 +271,17 @@ export function loadDashboard() {
   loadTotalUsers();
   loadDevices();
   loadLogs();
-  
+
   // Initialize real-time updates
   initializeRealtimeUpdates();
-  
+
   // Fallback polling every 30 seconds (much less frequent since we have real-time)
   setInterval(() => {
     // Only poll if WebSocket is not connected
     if (!realtimeService.getConnectionStatus().isConnected) {
-      loadTotalUsers();
-      loadDevices();
-      loadLogs();
+    loadTotalUsers();
+    loadDevices();
+    loadLogs();
     }
   }, 30000); // 30 seconds
 }

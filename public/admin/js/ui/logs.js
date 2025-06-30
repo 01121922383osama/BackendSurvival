@@ -32,17 +32,29 @@ async function loadLogsData(deviceId = null) {
   const loadingIndicator = document.getElementById('logs-loading-section');
   const emptyIndicator = document.getElementById('logs-empty-section');
   const logsTableBody = document.getElementById('logs-table-body');
-
-  console.log('[DEBUG] logsTableBody:', logsTableBody);
-
+  // Add a container for cards
+  let logsCardContainer = document.getElementById('logs-card-container');
+  if (!logsCardContainer) {
+    logsCardContainer = document.createElement('div');
+    logsCardContainer.id = 'logs-card-container';
+    logsCardContainer.className = 'row';
+    // Insert after the table
+    const table = logsTableBody ? logsTableBody.closest('table') : null;
+    if (table && table.parentElement) {
+      table.parentElement.parentElement.insertBefore(logsCardContainer, table.parentElement.nextSibling);
+    } else {
+      document.getElementById('logs-section').appendChild(logsCardContainer);
+    }
+  }
+  logsCardContainer.innerHTML = '';
+  if (logsTableBody) logsTableBody.innerHTML = '';
   if (loadingIndicator) loadingIndicator.classList.remove('d-none');
   if (emptyIndicator) emptyIndicator.classList.add('d-none');
-  if (logsTableBody) logsTableBody.innerHTML = '';
 
   try {
     let url = '/logs?limit=50';
     if (deviceId && deviceId !== 'all') {
-      url += `&device=${deviceId}`;
+      url = `/logs/device/${deviceId}?limit=50`;
     }
 
     const response = await fetch(url, {
@@ -53,10 +65,13 @@ async function loadLogsData(deviceId = null) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
 
-    const data = await response.json();
-    const logs = data.logs || [];
-
-    console.log('[DEBUG] logs fetched:', logs);
+    let logs = [];
+    if (url.startsWith('/logs/device/')) {
+      logs = await response.json();
+    } else {
+      const data = await response.json();
+      logs = data.logs || [];
+    }
 
     if (loadingIndicator) loadingIndicator.classList.add('d-none');
 
@@ -67,23 +82,20 @@ async function loadLogsData(deviceId = null) {
         <p>No logs found for the selected device.</p>
         <small class="text-muted">Try another device or check back later.</small>
       `;
+      logsCardContainer.innerHTML = '';
       return;
     }
 
-    // Render logs
-    logs.forEach((log, idx) => {
-      console.log('[DEBUG] Rendering log', idx, log);
-      const row = createLogRow(log);
-      if (logsTableBody) {
-        logsTableBody.appendChild(row);
-        console.log('[DEBUG] Row appended, tbody now has', logsTableBody.children.length, 'children');
-      }
-    });
+    // Hide the table when rendering cards
+    const table = logsTableBody ? logsTableBody.closest('table') : null;
+    if (table) table.style.display = 'none';
+    logsCardContainer.style.display = '';
 
-    // Debug: Check final state
-    console.log('[DEBUG] After rendering, tbody children count:', logsTableBody ? logsTableBody.children.length : 'N/A');
-    console.log('[DEBUG] Table visibility check:', logsTableBody ? getComputedStyle(logsTableBody.parentElement.parentElement).display : 'N/A');
-    console.log('[DEBUG] Section visibility check:', document.getElementById('logs-section') ? getComputedStyle(document.getElementById('logs-section')).display : 'N/A');
+    // Render logs as cards
+    logs.forEach((log, idx) => {
+      const card = createLogCard(log);
+      logsCardContainer.appendChild(card);
+    });
 
     showToast('Success', `Loaded ${logs.length} log(s)`, 'success');
 
@@ -96,58 +108,110 @@ async function loadLogsData(deviceId = null) {
       <p>Failed to load logs.</p>
       <small class="text-muted">Please try again later.</small>
     `;
+    logsCardContainer.innerHTML = '';
     showToast('Error', 'Failed to load logs', 'danger');
   }
 }
 
-function createLogRow(log) {
-  console.log('[DEBUG] createLogRow called with:', log);
-  const row = document.createElement('tr');
-  
-  const timestamp = new Date(log.timestamp).toLocaleString();
-  const status = log.status || 'unknown';
-  const statusClass = getStatusClass(status);
-  const params = log.params ? JSON.stringify(log.params, null, 2) : '{}';
-  
-  row.innerHTML = `
-    <td>${timestamp}</td>
-    <td><code>${log.device_id || '-'}</code></td>
-    <td><span class="badge ${statusClass}">${status}</span></td>
-    <td>
-      <button class="btn btn-sm btn-outline-info" onclick="viewLogDetails('${log.id}')" title="View Details" data-bs-toggle="tooltip" data-bs-placement="top">
-        <i class="fas fa-eye"></i>
-      </button>
-    </td>
-    <td>
-      <button class="btn btn-sm btn-outline-secondary" onclick="viewLogParams('${log.id}')" title="View Parameters" data-bs-toggle="tooltip" data-bs-placement="top">
-        <i class="fas fa-code"></i>
-      </button>
-    </td>
-  `;
+// Dart-to-JS color logic for log.params
+function getColorForParams(p) {
+  if (p['online']?.toString() === '?') {
+    return 'secondary'; // grey
+  }
 
-  // Add hover effect
-  row.style.transition = 'background 0.2s';
-  row.onmouseover = () => row.style.background = '#f8f9fa';
-  row.onmouseout = () => row.style.background = '';
+  function isNoMotionNoMoveNoSomeOneNoSomeExistField(key) {
+    const v = p[key]?.toString();
+    if (v == null) return false;
+    if (v === '?') return true;
+    const n = parseInt(v, 10);
+    return !isNaN(n) && n === 0;
+  }
+
+  function isBlueField(key) {
+    const v = p[key]?.toString();
+    if (v == null) return false;
+    if (v === '?') return true;
+    const n = parseInt(v, 10);
+    return !isNaN(n) && n !== 0;
+  }
+
+  function isGreenField(key) {
+    const v = p[key]?.toString();
+    if (v == null) return false;
+    if (v === '?') return true;
+    const n = parseInt(v, 10);
+    return !isNaN(n) && n !== 0;
+  }
+
+  if (p['fallStatus']?.toString() === '1') {
+    return 'danger'; // red
+  } else if (p['residentStatus']?.toString() === '1') {
+    return 'warning'; // yellow
+  } else if (
+    isGreenField('motionStatus') ||
+    isGreenField('movementSigns') ||
+    isGreenField('someoneExists')
+  ) {
+    return 'success'; // green
+  } else if (isBlueField('online') || isGreenField('heartBeat')) {
+    return 'primary'; // blue
+  } else if (isGreenField('fallStatus')) {
+    return 'success'; // green
+  } else if (
+    isNoMotionNoMoveNoSomeOneNoSomeExistField('motionStatus') ||
+    isNoMotionNoMoveNoSomeOneNoSomeExistField('movementSigns') ||
+    isNoMotionNoMoveNoSomeOneNoSomeExistField('someoneExists')
+  ) {
+    return 'primary'; // blue
+  } else {
+    return 'secondary'; // grey
+  }
+}
+
+function createLogCard(log) {
+  // Use params (payload) for color logic
+  const paramsObj = log.params || {};
+  const color = getColorForParams(paramsObj); // 'success', 'danger', etc.
+  const cardColor = `border-${color}`;
+  const statusClass = `bg-${color}`;
+  const timestamp = log.timestamp ? new Date(log.timestamp).toLocaleString() : '';
+  const params = Object.keys(paramsObj).length ? JSON.stringify(paramsObj, null, 2) : '{}';
+
+  const col = document.createElement('div');
+  col.className = 'col-md-6 col-lg-4 mb-4';
+
+  col.innerHTML = `
+    <div class="card h-100 shadow-sm ${cardColor}">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span class="badge ${statusClass}">${color.toUpperCase()}</span>
+        <span class="text-muted small">${timestamp}</span>
+      </div>
+      <div class="card-body">
+        <div class="mb-2"><strong>Device ID:</strong> <code>${log.device_id || '-'}</code></div>
+        <div class="mb-2"><strong>Parameters:</strong>
+          <pre class="mb-0" style="white-space:pre-wrap; font-size:0.9em;">${params}</pre>
+        </div>
+      </div>
+      <div class="card-footer d-flex justify-content-end gap-2">
+        <button class="btn btn-sm btn-outline-info" onclick="viewLogDetails('${log.id}')" title="View Details" data-bs-toggle="tooltip" data-bs-placement="top">
+          <i class="fas fa-eye"></i>
+        </button>
+        <button class="btn btn-sm btn-outline-secondary" onclick="viewLogParams('${log.id}')" title="View Parameters" data-bs-toggle="tooltip" data-bs-placement="top">
+          <i class="fas fa-code"></i>
+        </button>
+      </div>
+    </div>
+  `;
 
   // Enable Bootstrap tooltips
   setTimeout(() => {
-    const tooltipTriggerList = [].slice.call(row.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    const tooltipTriggerList = [].slice.call(col.querySelectorAll('[data-bs-toggle="tooltip"]'));
     tooltipTriggerList.forEach(function (tooltipTriggerEl) {
       new bootstrap.Tooltip(tooltipTriggerEl);
     });
   }, 0);
 
-  return row;
-}
-
-function getStatusClass(status) {
-  const statusLower = status.toLowerCase();
-  if (statusLower === 'online' || statusLower === 'green') return 'bg-success';
-  if (statusLower === 'offline' || statusLower === 'red') return 'bg-danger';
-  if (statusLower === 'alert' || statusLower === 'yellow') return 'bg-warning';
-  if (statusLower === 'blue') return 'bg-info';
-  return 'bg-secondary';
+  return col;
 }
 
 function handleDeviceFilter(event) {
@@ -230,3 +294,5 @@ export function loadLogs() {
     loadLogsData();
   }, 30000);
 }
+
+export { loadLogsData };
